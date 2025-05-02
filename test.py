@@ -1,8 +1,10 @@
 import sys
 import time as timemod
 import requests
-from fonts import fonts
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime
+from fonts import fonts
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QLabel, QComboBox, QToolButton, QGraphicsDropShadowEffect, QSizePolicy
@@ -12,7 +14,6 @@ from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QTimer
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 FIREBASE_PLANTA_URL = "https://photosyntech-10464-default-rtdb.firebaseio.com/planta.json"
-
 
 class IconButton(QToolButton):
     def __init__(self, icon_path, text):
@@ -51,10 +52,24 @@ class MainWindow(QMainWindow):
         self.resize(1280, 720)
         self.times = []
         self.temps = []
+        self.load_saved_data()
         self.setup_ui()
         self.apply_styles()
         self.setup_animations()
         self.start_data_timer()
+
+    def load_saved_data(self):
+        try:
+            with open("temperatura_log.txt", "r") as f:
+                for line in f:
+                    parts = line.strip().split(", ")
+                    if len(parts) == 2:
+                        timestamp = datetime.strptime(parts[0], "%Y-%m-%d %H:%M:%S")
+                        temp = float(parts[1])
+                        self.times.append(timestamp)
+                        self.temps.append(temp)
+        except FileNotFoundError:
+            pass
 
     def setup_ui(self):
         central = QWidget()
@@ -63,13 +78,11 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Left panel
         left_frame = QFrame()
         left_layout = QVBoxLayout(left_frame)
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(10)
 
-        # Toolbar
         toolbar = QFrame()
         tb_layout = QHBoxLayout(toolbar)
         tb_layout.setSpacing(10)
@@ -85,21 +98,30 @@ class MainWindow(QMainWindow):
             tb_layout.addWidget(btn)
         left_layout.addWidget(toolbar)
 
-        # Figure & Canvas
         self.fig, self.ax = plt.subplots()
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_layout.addWidget(self.canvas, 1)
+
+        # Plot saved data
+        if self.times and self.temps:
+            self.ax.plot(self.times, self.temps, marker="o")
+            self.ax.set_title("Temperatura vs Hora del Día")
+            self.ax.set_xlabel("Hora")
+            self.ax.set_ylabel("°C")
+            self.ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            self.ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+            self.fig.autofmt_xdate()
+            self.canvas.draw()
+
         main_layout.addWidget(left_frame, 3)
 
-        # Right panel
         right_frame = QFrame()
         right_frame.setObjectName("rightPanel")
         right_layout = QVBoxLayout(right_frame)
         right_layout.setContentsMargins(15, 15, 15, 15)
         right_layout.setSpacing(10)
 
-        # Info labels
         info = QHBoxLayout()
         self.climate_label = QLabel("🌡️ Temp: -- °C")
         self.climate_label.setFont(fonts.TITLE)
@@ -112,14 +134,14 @@ class MainWindow(QMainWindow):
         info.addWidget(self.soil_label)
         info.addWidget(self.humid_label)
         right_layout.addLayout(info)
+
         gif = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         movie = QMovie("MTLnEyn6c.gif")
-        movie.setSpeed(50)  # Reduce la velocidad (menos que 100 será más lento)
+        movie.setSpeed(50)
         gif.setMovie(movie)
         movie.start()
         right_layout.addWidget(gif, 3)
 
-        # Controls
         ctr = QHBoxLayout()
         combo = QComboBox()
         combo.addItems(["C", "D", "E", "F", "G", "A", "B"])
@@ -172,19 +194,21 @@ class MainWindow(QMainWindow):
                     self.climate_label.setText(f"🌡️ Temp: {t} °C")
                     self.soil_label.setText(f"💧 H.suelo: {hs} %")
                     self.humid_label.setText(f"💦 H.rel: {hr} %")
-                    now = timemod.time()
+                    now = datetime.now()
                     self.times.append(now)
                     self.temps.append(t)
 
-                    # Definir el rango del eje X para mantener el margen
-                    if len(self.times) > 1:
-                        # Asegurar que el margen no se agote
-                        self.ax.set_xlim(self.times[0], self.times[-1] + 60)  # +60 segundos de margen
+                    with open("temperatura_log.txt", "a") as f:
+                        f.write(f"{now.strftime('%Y-%m-%d %H:%M:%S')}, {t}\n")
+
                     self.ax.clear()
-                    self.ax.plot(self.times, self.temps)
-                    self.ax.set_title("Temperatura vs Tiempo")
-                    self.ax.set_xlabel("Tiempo")
+                    self.ax.plot(self.times, self.temps, marker="o")
+                    self.ax.set_title("Temperatura vs Hora del Día")
+                    self.ax.set_xlabel("Hora")
                     self.ax.set_ylabel("°C")
+                    self.ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+                    self.ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+                    self.fig.autofmt_xdate()
                     self.canvas.draw()
         except Exception as e:
             print("Error fetching data:", e)
