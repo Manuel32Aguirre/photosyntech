@@ -1,17 +1,18 @@
 import sys
 import time as timemod
 import requests
-import numpy as np
+from fonts import fonts
 import matplotlib.pyplot as plt
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QHBoxLayout, QVBoxLayout,
     QLabel, QComboBox, QToolButton, QGraphicsDropShadowEffect, QSizePolicy
 )
-from PyQt6.QtGui import QIcon, QCursor, QColor, QMovie
+from PyQt6.QtGui import QIcon, QCursor, QColor, QMovie, QFontDatabase, QFont
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect, QTimer
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 FIREBASE_PLANTA_URL = "https://photosyntech-10464-default-rtdb.firebaseio.com/planta.json"
+
 
 class IconButton(QToolButton):
     def __init__(self, icon_path, text):
@@ -101,8 +102,12 @@ class MainWindow(QMainWindow):
         # Info labels
         info = QHBoxLayout()
         self.climate_label = QLabel("🌡️ Temp: -- °C")
+        self.climate_label.setFont(fonts.TITLE)
         self.soil_label = QLabel("💧 H.suelo: -- %")
+        self.soil_label.setFont(fonts.TITLE)
         self.humid_label = QLabel("💦 H.rel: -- %")
+        self.humid_label.setFont(fonts.TITLE)
+
         info.addWidget(self.climate_label)
         info.addWidget(self.soil_label)
         info.addWidget(self.humid_label)
@@ -113,7 +118,6 @@ class MainWindow(QMainWindow):
         gif.setMovie(movie)
         movie.start()
         right_layout.addWidget(gif, 3)
-
 
         # Controls
         ctr = QHBoxLayout()
@@ -187,6 +191,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    fonts.setup_fonts()
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
