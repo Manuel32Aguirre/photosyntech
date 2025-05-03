@@ -4,8 +4,8 @@ NORMAL_FONT = 'Arial' #Default font
 BOLD_FONT = 'Arial Black'
 
 def setup_fonts() -> None:
-    mont_id = QFontDatabase.addApplicationFont('./fonts/SpaceGrotesk-Regular.ttf')
-    bold_id = QFontDatabase.addApplicationFont('./fonts/SpaceGrotesk-Bold.ttf')
+    mont_id = QFontDatabase.addApplicationFont('./ui/fonts/SpaceGrotesk-Regular.ttf')
+    bold_id = QFontDatabase.addApplicationFont('./ui/fonts/SpaceGrotesk-Bold.ttf')
 
     if mont_id != -1 and bold_id != -1:
         global NORMAL_FONT, BOLD_FONT
