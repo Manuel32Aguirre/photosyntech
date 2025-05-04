@@ -5,9 +5,9 @@ from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QMovie
 from PyQt6.QtWidgets import QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabel, QComboBox
 import matplotlib.pyplot as plt
-from photosyntech.ui.IconButton import IconButton
-from photosyntech.ui.fonts import fonts
-from photosyntech.ui.modules.Module import Module
+from ui.IconButton import IconButton
+from ui.fonts import fonts
+from ui.modules.Module import Module
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.dates as mdates
 
@@ -30,7 +30,9 @@ class MainModule(Module):
         self.__climate_label = QLabel("🌡️ Temp: -- °C")
         self.__soil_label = QLabel("💧 H.suelo: -- %")
         self.__humid_label = QLabel("💦 H.rel: -- %")
-        self.__movie = QMovie("./ui/img/plant.gif")
+        import os
+        d = os.path.dirname(__file__)
+        self.__movie = QMovie(os.path.join(d, '../img/plant.gif'))
         self.__combo = QComboBox()
         self.__times = []
         self.__temps = []

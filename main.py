@@ -2,8 +2,8 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from photosyntech.ui.MainWindow import MainWindow
-from photosyntech.ui.fonts import fonts
+from ui.MainWindow import MainWindow
+from ui.fonts import fonts
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

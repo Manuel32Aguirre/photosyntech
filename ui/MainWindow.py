@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QFrame, QTabWidget
 )
 
-from photosyntech.ui.modules.Module import Module
-from photosyntech.ui.modules.modules_provider import get_all_modules
+from ui.modules.Module import Module
+from ui.modules.modules_provider import get_all_modules
 
 class MainWindow(QMainWindow):
     def __init__(self):

@@ -1,6 +1,6 @@
-from photosyntech.ui.modules.GraphsModule import GraphsModule
-from photosyntech.ui.modules.MainModule import MainModule
-from photosyntech.ui.modules.Module import Module
+from ui.modules.GraphsModule import GraphsModule
+from ui.modules.MainModule import MainModule
+from ui.modules.Module import Module
 
 def get_all_modules() -> list[Module]:
     """

@@ -1,8 +1,8 @@
 from typing import override
 
-from PyQt6.QtWidgets import QVBoxLayout, QListWidget
+from PyQt6.QtWidgets import QVBoxLayout
 
-from photosyntech.ui.modules.Module import Module
+from ui.modules.Module import Module
 
 
 class GraphsModule(Module):
