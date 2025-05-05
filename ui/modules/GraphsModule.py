@@ -1,4 +1,4 @@
-from typing import override
+#from typing import override
 
 from PyQt6.QtWidgets import QVBoxLayout
 
@@ -11,6 +11,6 @@ class GraphsModule(Module):
         super().__init__()
         self.__main_layout = QVBoxLayout()
 
-    @override
+    #@override
     def draw(self):
         pass
