@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import override
+#from typing import override
 import requests
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QMovie
@@ -58,7 +58,7 @@ class MainModule(Module):
         except FileNotFoundError:
             pass
 
-    @override
+    #@override
     def draw(self):
         self.__load_saved_data()
         self.__start_data_timer()
