@@ -10,7 +10,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PhotoSyntech v1.0")
-        self.resize(1280, 720)
+        self.showFullScreen()
+        self.resizable = False
         self.__central = QTabWidget()
         self.__tabs: list[Module] = get_all_modules()
         self.times = []
