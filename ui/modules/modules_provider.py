@@ -5,6 +5,7 @@ from model.WeatherInfo import WeatherInfo
 from ui.modules.GraphsModule import GraphsModule
 from ui.modules.MainModule import MainModule
 from ui.modules.Module import Module
+from ui.modules.SettingsModule import SettingsModule
 
 
 def get_all_modules() -> list[Module]:
@@ -25,5 +26,6 @@ def get_all_modules() -> list[Module]:
     })()
     return [
         MainModule(),
-        GraphsModule(w)
+        GraphsModule(w),
+        SettingsModule()
     ]
