@@ -1,14 +1,16 @@
 from typing import override
 
 import matplotlib.pyplot as plt
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread
 from PyQt6.QtGui import QLinearGradient, QColor, QPainter
-from PyQt6.QtWidgets import QGridLayout, QGroupBox, QVBoxLayout, QLabel, QPushButton, QWidget, QFrame
+from PyQt6.QtWidgets import QGridLayout, QGroupBox, QVBoxLayout, QLabel, QPushButton, QWidget, QFrame, QProgressBar
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 from controller.GetWeather import GetWeather
+from model.WeatherInfo import WeatherInfo
 from ui.fonts.fonts import TITLE, NORMAL
 from ui.modules.Module import Module
+from ui.modules.WeatherWorker import WeatherWorker
 
 
 class GraphsModule(Module):
@@ -25,9 +27,27 @@ class GraphsModule(Module):
         self.__figs = []
         self.__ax = []
         self.__canvas = []
+
+        self.__city_label = QLabel()
+        self.__full_name = QLabel()
+        self.__temp_label = QLabel()
+        self.__status = QLabel()
+        self.__last_update = QLabel()
+        self.__update_btn = QPushButton('Actualizar ahora')
+
         self.__weather = weather
+        self.__weather_card = QFrame()
+
+        self.__worker_thread = None
+        self.__worker = None
+
         self.__card = QFrame()
         self.__card.setObjectName('card')
+        self.__progress_bar = QProgressBar()
+        self.__progress_bar.setFixedWidth(950)
+        self.__progress_bar.setRange(0, 0)
+        self.__progress_bar.setVisible(True)
+
         self.setStyleSheet(
             """
             #mainFrame {
@@ -91,7 +111,9 @@ class GraphsModule(Module):
         return group
 
     def __create_weather_panel(self):
-        self.__weather_card = QFrame()
+        self.__update_weather()
+        self.__grid_layout.addWidget(self.__progress_bar, 1, 1)
+        self.__weather_card.setVisible(False)
         self.__weather_card.setObjectName('weatherCard')
         group_layout = QVBoxLayout(self.__weather_card)
         title = QLabel('Clima en tu región')
@@ -104,32 +126,27 @@ class GraphsModule(Module):
         self.__card.paintEvent = self.__paint_gradient
         grid_card = QGridLayout(self.__card)
         group_layout.addWidget(self.__card, stretch=2)
-        info = self.__weather.get_weather()
-        city_label = QLabel(info.city)
-        city_label.setFont(TITLE)
-        city_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid_card.addWidget(city_label, 0, 0)
-        full_name = QLabel(info.region)
-        full_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid_card.addWidget(full_name, 1, 0)
-        temp_label = QLabel(f'{info.temperature}ºC')
-        temp_label.setFont(NORMAL)
-        temp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid_card.addWidget(temp_label, 2, 0)
+        self.__city_label.setFont(TITLE)
+        self.__city_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid_card.addWidget(self.__city_label, 0, 0)
+        self.__full_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid_card.addWidget(self.__full_name, 1, 0)
+        self.__temp_label.setFont(NORMAL)
+        self.__temp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid_card.addWidget(self.__temp_label, 2, 0)
         update_info = QLabel('El clima se actualizará en 01:00')
         update_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         grid_card.addWidget(update_info, 3, 0)
-        status = QLabel(info.condition)
-        status.setFont(NORMAL)
-        status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid_card.addWidget(status, 0, 1)
-        last_update = QLabel(f'Última actualización: {info.last_updated}')
-        last_update.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        grid_card.addWidget(last_update, 1, 1, 2, 1)
-        update_btn = QPushButton('Actualizar ahora')
-        update_btn.setFixedHeight(40)
-        grid_card.addWidget(update_btn, 3, 1)
+        self.__status.setFont(NORMAL)
+        self.__status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid_card.addWidget(self.__status, 0, 1)
+        self.__last_update.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid_card.addWidget(self.__last_update, 1, 1, 2, 1)
+        self.__update_btn.setFixedHeight(40)
+        self.__update_btn.clicked.connect(self.__update_weather)
+        grid_card.addWidget(self.__update_btn, 3, 1)
         self.__grid_layout.addWidget(self.__weather_card, 1, 1)
+        self.__worker_thread.start()
 
     def __paint_gradient(self, _):
         painter = QPainter(self.__card)
@@ -140,3 +157,37 @@ class GraphsModule(Module):
         painter.setBrush(gradient)
         painter.drawRoundedRect(self.__card.rect(), 25.0, 25.0)
         painter.end()
+
+    def __complete_thread(self):
+        self.__update_btn.setEnabled(True)
+        self.__progress_bar.setVisible(False)
+        self.__weather_card.setVisible(True)
+        self.__worker_thread = None
+        self.__worker = None
+
+    def __update_wheater_labels(self, w: WeatherInfo):
+        self.__city_label.setText(w.city)
+        self.__full_name.setText(w.region)
+        self.__temp_label.setText(f'{w.temperature}ºC')
+        self.__status.setText(w.condition)
+        self.__last_update.setText(f'Última actualización: {w.last_updated}')
+
+    def __update_weather(self):
+
+        self.__update_btn.setEnabled(False)
+
+        self.__progress_bar.setVisible(True)
+        self.__weather_card.setVisible(False)
+
+        self.__worker_thread = QThread()
+        self.__worker = WeatherWorker(weather=self.__weather)
+        self.__worker.moveToThread(self.__worker_thread)
+
+        self.__worker_thread.started.connect(self.__worker.run_task)
+        self.__worker.finished.connect(self.__worker_thread.quit)
+        self.__worker.finished.connect(self.__worker.deleteLater)
+        self.__worker_thread.finished.connect(self.__worker_thread.deleteLater)
+        self.__worker.result_ready.connect(self.__update_wheater_labels)
+        self.__worker_thread.finished.connect(self.__complete_thread)
+
+        self.__worker_thread.start()
