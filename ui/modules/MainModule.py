@@ -141,7 +141,7 @@ class MainModule(Module):
         self.__ax.set_title("Señal Bioeléctrica en tiempo real (2 Hz)")
         self.__ax.set_xlabel("Hora")
         self.__ax.set_ylabel("Voltaje (V)")
-        self.__ax.set_ylim(-1.2, 1.2)
+        self.__ax.set_ylim(0, 3)
         self.__ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S.%f'))
         self.__ax.set_xlim(left=corte, right=tiempo)
         self.__fig.autofmt_xdate()
