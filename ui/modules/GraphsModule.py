@@ -122,10 +122,10 @@ class GraphsModule(Module):
 
         def update_annot(ind):
             x_vals, y_vals = line.get_data()
-            if ind["ind"]:
+            if len(ind["ind"]) > 0:  # ← Aquí el fix
                 i = ind["ind"][0]
                 annot.xy = (x_vals[i], y_vals[i])
-                annot.set_text(f"{y_vals[i]:.2f}") 
+                annot.set_text(f"{y_vals[i]:.2f}")
 
         def hover(event):
             if event.inaxes == ax:

@@ -4,6 +4,10 @@ nombre=Duranta
 nombre_cientifico=Duranta erecta
 descripcion=Planta ornamental común en jardines, resistente al sol directo y de crecimiento rápido.
 
+# Rango ideal para temperatura (°C)
+temperatura_min=10
+temperatura_max=30
+
 # Rango ideal para humedad del suelo (%)
 humedad_suelo_min=40
 humedad_suelo_max=70

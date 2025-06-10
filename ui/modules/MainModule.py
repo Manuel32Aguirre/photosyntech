@@ -60,16 +60,17 @@ class MainModule(Module):
         toolbar = QFrame()
         tb_layout = QHBoxLayout(toolbar)
         tb_layout.setSpacing(10)
-        icons = [
-            ("icons/upload.svg", ""), ("icons/sensor.svg", ""), ("icons/settings.svg", ""),
-            ("icons/plant.svg", ""), ("icons/weather.svg", ""), ("icons/play.svg", ""),
-            ("icons/key.svg", ""), ("icons/record.svg", "")
-        ]
-        for path, _ in icons:
-            btn = IconButton(path, "")
-            btn.setFixedSize(50, 50)
-            btn.clicked.connect(lambda _, p=path: print(f"{p} clicked"))
-            tb_layout.addWidget(btn)
+        #icons = [
+          #  ("icons/upload.svg", ""), ("icons/sensor.svg", ""), ("icons/settings.svg", ""),
+         #   ("icons/plant.svg", ""), ("icons/weather.svg", ""), ("icons/play.svg", ""),
+        #    ("icons/key.svg", ""), ("icons/record.svg", "")
+        #]
+        #icons = []
+        #for path, _ in icons:
+         #   btn = IconButton(path, "")
+         #   btn.setFixedSize(50, 50)
+         #   btn.clicked.connect(lambda _, p=path: print(f"{p} clicked"))
+         #   tb_layout.addWidget(btn)
         self.__left_layout.addWidget(toolbar)
 
         # Gráfica
@@ -108,7 +109,7 @@ class MainModule(Module):
         ctr = QHBoxLayout()
         self.__combo.addItems(["C", "D", "E", "F", "G", "A", "B"])
         self.__combo.currentTextChanged.connect(lambda t: print(f"Tonalidad: {t}"))
-        rec = IconButton("icons/record.svg", "")
+        rec = IconButton("img/record.webp", "")
         rec.setFixedSize(50, 50)
         rec.clicked.connect(lambda: print("Record pressed"))
         ctr.addWidget(self.__combo)

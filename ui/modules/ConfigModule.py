@@ -131,8 +131,9 @@ class ConfigModule(Module):
             perfil_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar archivo de perfil", "", "Text Files (*.txt)")
             if perfil_path:
                 try:
+                    # Leer todas las líneas válidas (ignorando comentarios)
                     with open(perfil_path, "r", encoding="utf-8") as f:
-                        lineas = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                        lineas = [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
 
                     datos = {}
                     for linea in lineas:
@@ -140,24 +141,27 @@ class ConfigModule(Module):
                             clave, valor = linea.split("=", 1)
                             datos[clave.strip()] = valor.strip()
 
-                    # Validar claves necesarias
+                    # Claves requeridas actualizadas
                     claves_necesarias = [
                         "nombre", "nombre_cientifico", "descripcion",
+                        "temperatura_min", "temperatura_max",
                         "humedad_suelo_min", "humedad_suelo_max",
                         "humedad_relativa_min", "humedad_relativa_max",
                         "iluminacion_min", "iluminacion_max",
                         "voltaje_min", "voltaje_max"
                     ]
+
+                    # Validación de claves faltantes
                     faltantes = [clave for clave in claves_necesarias if clave not in datos]
                     if faltantes:
                         raise ValueError("Faltan claves requeridas: " + ", ".join(faltantes))
 
-                    # Validar que los valores numéricos sean válidos
+                    # Validación de valores numéricos
                     for clave in claves_necesarias:
                         if clave.endswith("_min") or clave.endswith("_max"):
-                            float(datos[clave])  # lanza excepción si no es numérico
+                            float(datos[clave])  # lanza excepción si no es convertible
 
-                    # Guardar como Perfil.txt tal como está
+                    # Guardar archivo tal cual como Perfil.txt
                     with open(perfil_path, "r", encoding="utf-8") as f_in, open("Perfil.txt", "w", encoding="utf-8") as f_out:
                         f_out.write(f_in.read())
 
@@ -165,6 +169,7 @@ class ConfigModule(Module):
                     QMessageBox.information(self, "Éxito", "✅ Perfil válido cargado y guardado.")
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"❌ Error al validar el perfil:\n{e}")
+
 
 
         def open_folder():
