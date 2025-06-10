@@ -21,15 +21,25 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet(
             """
-            QTabWidget::pane{border: none;}
-            
+            QTabWidget::pane { border: none; }
+            QTabBar::tab {
+                background: #8DB986;
+                color: black;
+                font-weight: bold;
+                padding: 10px;
+                border: 1px solid #7AA774;
+            }
+            QTabBar::tab:selected {
+                background: #6BA568;
+                color: white;
+            }
             """
         )
 
     def __setup_ui(self):
-        for i, m in enumerate(self.__tabs):
+        for m in self.__tabs:
             m.draw()
-            self.__central.addTab(m, f"Tab {i}")
+            self.__central.addTab(m, str(m))
         self.setCentralWidget(self.__central)
 
     def __setup_animations(self):

@@ -154,3 +154,6 @@ class MainModule(Module):
                     self.__update_graph()
         except Exception as e:
             print("Error fetching data:", e)
+
+    def __str__(self):
+        return 'Ventana principal'

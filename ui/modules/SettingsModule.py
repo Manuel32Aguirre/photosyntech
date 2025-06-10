@@ -101,3 +101,6 @@ class SettingsModule(Module):
         )
         if folder:
             self.__path_edit.setText(folder)
+
+    def __str__(self):
+        return 'Configuración'
