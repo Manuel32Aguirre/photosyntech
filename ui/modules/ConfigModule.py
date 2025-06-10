@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout, QLineEdit, QRadioButton,
-    QCheckBox, QComboBox, QPushButton, QFileDialog, QFrame, QButtonGroup, QToolTip, QGridLayout
+    QCheckBox, QComboBox, QPushButton, QFileDialog, QButtonGroup,
+    QMessageBox, QSizePolicy, QGroupBox
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
@@ -15,83 +16,168 @@ class ConfigModule(Module):
                 color: white;
                 font-family: Arial;
             }
-            QRadioButton, QCheckBox {
+            QGroupBox {
+                border: 2px solid #00C97C;
+                border-radius: 5px;
+                margin-top: 10px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 0 10px;
                 color: #00C97C;
+                font-weight: bold;
             }
             QLineEdit {
+                background-color: #262143;
                 border: 1px solid #00C97C;
-                background-color: #1B1731;
-                color: white;
                 padding: 6px;
+                color: white;
             }
             QComboBox {
                 background-color: #e6f2ee;
                 color: black;
                 padding: 6px;
             }
+            QPushButton {
+                padding: 10px;
+                font-weight: bold;
+            }
         """)
 
-        main_layout = QVBoxLayout()
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(60)
-        grid.setVerticalSpacing(30)
+        self.setMinimumHeight(800)
+        main_layout = QHBoxLayout()
 
-        # FILA 1: Dos secciones de muestras
-        grid.addLayout(self.create_sample_section("Tomar una muestra de los sensores cada:"), 0, 0)
-        grid.addLayout(self.create_sample_section("Tomar una muestra del clima:"), 0, 1)
+        # === PANEL IZQUIERDO ===
+        panel_izquierdo = QVBoxLayout()
 
-        # FILA 2: Checkbox e info
-        notif_layout = QHBoxLayout()
-        checkbox = QCheckBox("Notificarme lecturas peligrosas")
-        checkbox.setChecked(True)
-        tooltip_icon = QLabel("🛈")
-        tooltip_icon.setToolTip("Una lectura riesgosa se considera arriba de 25°C")
-        tooltip_icon.setStyleSheet("color: white; font-size: 18px; margin-left: 5px;")
-        notif_layout.addWidget(checkbox)
-        notif_layout.addWidget(tooltip_icon)
-        notif_layout.addStretch()
-        grid.addLayout(notif_layout, 1, 0)
+        # Perfil
+        perfil_group = QGroupBox("Perfil")
+        perfil_layout = QVBoxLayout()
+        self.perfil_label = QLabel("Perfil cargado: Ninguno")
+        self.perfil_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        perfil_layout.addWidget(self.perfil_label)
 
-        # FILA 3: Formato
-        format_layout = QVBoxLayout()
-        format_label = QLabel("Exportar melodías\ngeneradas en formato:")
-        format_label.setFont(QFont("Arial", 12))
-        format_layout.addWidget(format_label)
+        cargar_btn = QPushButton("📂 Cargar perfil de planta")
+        cargar_btn.setStyleSheet("background-color: #663399; color: white;")
+        cargar_btn.setFixedWidth(250)
+        perfil_layout.addWidget(cargar_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        perfil_group.setLayout(perfil_layout)
+        panel_izquierdo.addWidget(perfil_group)
+
+        # Muestreo
+        muestreo_group = QGroupBox("Muestreo")
+        muestreo_layout = QVBoxLayout()
+        muestreo_layout.addLayout(self.create_sample_section("Sensores internos"))
+        muestreo_layout.addLayout(self.create_sample_section("Clima ambiental"))
+        muestreo_group.setLayout(muestreo_layout)
+        panel_izquierdo.addWidget(muestreo_group)
+
+        # Alertas
+        alertas_group = QGroupBox("Alertas")
+        alertas_layout = QHBoxLayout()
+        alerta_checkbox = QCheckBox("Activar notificaciones")
+        alerta_checkbox.setChecked(True)
+        iconito = QLabel("⚠️")
+        iconito.setToolTip("Lecturas peligrosas mayores a 25°C")
+        alertas_layout.addWidget(alerta_checkbox)
+        alertas_layout.addWidget(iconito)
+        alertas_group.setLayout(alertas_layout)
+        panel_izquierdo.addWidget(alertas_group)
+
+        panel_izquierdo.addStretch()
+
+        # === PANEL DERECHO ===
+        panel_derecho = QVBoxLayout()
+
+        # Exportación
+        export_group = QGroupBox("Exportar melodías")
+        export_layout = QVBoxLayout()
+        format_label = QLabel("Formato de archivo:")
         combo = QComboBox()
         combo.addItems(["MP3", "OGG", "M4A"])
-        combo.setFixedWidth(280)
-        format_layout.addWidget(combo)
-        grid.addLayout(format_layout, 2, 0)
+        combo.setFixedWidth(200)
+        export_layout.addWidget(format_label)
+        export_layout.addWidget(combo)
+        export_group.setLayout(export_layout)
+        panel_derecho.addWidget(export_group)
 
-        # FILA 3: Ruta y botón
-        path_container = QVBoxLayout()
-        path_container.addWidget(QLabel("Ruta de almacenamiento de melodías:"))
-
+        # Ruta
+        ruta_group = QGroupBox("Ruta de almacenamiento")
+        ruta_layout = QVBoxLayout()
+        ruta_layout.addWidget(QLabel("Carpeta destino:"))
         path_row = QHBoxLayout()
         folder_icon = QLabel("📁")
-        folder_icon.setStyleSheet("font-size: 24px; color: yellow; margin-right: 6px;")
-        path_display = QLineEdit("C:/Users/diego/photosyntech/melodias")
-        path_display.setReadOnly(True)
-        path_display.setStyleSheet("background-color: #79a88e; color: white; padding: 6px;")
-
+        folder_icon.setStyleSheet("font-size: 24px; margin-right: 6px;")
+        self.path_display = QLineEdit("C:/Users/diego/photosyntech/melodias")
+        self.path_display.setReadOnly(True)
+        self.path_display.setStyleSheet("background-color: #79a88e; color: white;")
         path_row.addWidget(folder_icon)
-        path_row.addWidget(path_display)
-        path_container.addLayout(path_row)
+        path_row.addWidget(self.path_display)
+        ruta_layout.addLayout(path_row)
 
-        browse_btn = QPushButton("Examinar")
-        browse_btn.setStyleSheet("background-color: #00804B; color: white; padding: 10px; font-weight: bold;")
+        browse_btn = QPushButton("Seleccionar carpeta")
+        browse_btn.setStyleSheet("background-color: #00804B; color: white;")
         browse_btn.setFixedWidth(180)
+        ruta_layout.addWidget(browse_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        ruta_group.setLayout(ruta_layout)
+        panel_derecho.addWidget(ruta_group)
+
+        panel_derecho.addStretch()
+
+        # === Eventos ===
+        def cargar_perfil():
+            perfil_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar archivo de perfil", "", "Text Files (*.txt)")
+            if perfil_path:
+                try:
+                    with open(perfil_path, "r", encoding="utf-8") as f:
+                        lineas = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+                    datos = {}
+                    for linea in lineas:
+                        if "=" in linea:
+                            clave, valor = linea.split("=", 1)
+                            datos[clave.strip()] = valor.strip()
+
+                    # Validar claves necesarias
+                    claves_necesarias = [
+                        "nombre", "nombre_cientifico", "descripcion",
+                        "humedad_suelo_min", "humedad_suelo_max",
+                        "humedad_relativa_min", "humedad_relativa_max",
+                        "iluminacion_min", "iluminacion_max",
+                        "voltaje_min", "voltaje_max"
+                    ]
+                    faltantes = [clave for clave in claves_necesarias if clave not in datos]
+                    if faltantes:
+                        raise ValueError("Faltan claves requeridas: " + ", ".join(faltantes))
+
+                    # Validar que los valores numéricos sean válidos
+                    for clave in claves_necesarias:
+                        if clave.endswith("_min") or clave.endswith("_max"):
+                            float(datos[clave])  # lanza excepción si no es numérico
+
+                    # Guardar como Perfil.txt tal como está
+                    with open(perfil_path, "r", encoding="utf-8") as f_in, open("Perfil.txt", "w", encoding="utf-8") as f_out:
+                        f_out.write(f_in.read())
+
+                    self.perfil_label.setText(f"Perfil cargado: {perfil_path.split('/')[-1]}")
+                    QMessageBox.information(self, "Éxito", "✅ Perfil válido cargado y guardado.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"❌ Error al validar el perfil:\n{e}")
+
 
         def open_folder():
             folder = QFileDialog.getExistingDirectory()
             if folder:
-                path_display.setText(folder)
+                self.path_display.setText(folder)
 
+        cargar_btn.clicked.connect(cargar_perfil)
         browse_btn.clicked.connect(open_folder)
-        path_container.addWidget(browse_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-        grid.addLayout(path_container, 2, 1)
 
-        main_layout.addLayout(grid)
+        # === Ensamble final ===
+        main_layout.addLayout(panel_izquierdo, 1)
+        main_layout.addLayout(panel_derecho, 1)
         self.setLayout(main_layout)
 
     def create_sample_section(self, label_text):
@@ -101,11 +187,9 @@ class ConfigModule(Module):
         section.addWidget(label)
 
         row = QHBoxLayout()
-        value_label = QLabel("Valor")
-        value_label.setFont(QFont("Arial", 11))
         value_input = QLineEdit()
         value_input.setFixedWidth(80)
-        row.addWidget(value_label)
+        row.addWidget(QLabel("Valor"))
         row.addWidget(value_input)
 
         radios = QVBoxLayout()

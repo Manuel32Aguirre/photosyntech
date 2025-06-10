@@ -1,24 +1,23 @@
-from datetime import datetime
-#from typing import override
-import requests
-from PyQt6.QtCore import QTimer, Qt
+from datetime import datetime, timedelta
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import (
+    QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabel, QComboBox
+)
 from PyQt6.QtGui import QMovie
-from PyQt6.QtWidgets import QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabel, QComboBox
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib import dates as mdates
+
 from ui.IconButton import IconButton
 from ui.fonts import fonts
 from ui.modules.Module import Module
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-import matplotlib.dates as mdates
-
-FIREBASE_PLANTA_URL = "https://photosyntech-10464-default-rtdb.firebaseio.com/planta.json"
+from ui.modules.getBioelectricalSignal import SeñalBioeléctrica
+import os
 
 
 class MainModule(Module):
-
     def __init__(self):
         super().__init__()
-        self.__timer = QTimer(self)
         self.__main_layout = QHBoxLayout()
         self.__left_frame = QFrame()
         self.__right_frame = QFrame()
@@ -30,12 +29,18 @@ class MainModule(Module):
         self.__climate_label = QLabel("🌡️ Temp: -- °C")
         self.__soil_label = QLabel("💧 H.suelo: -- %")
         self.__humid_label = QLabel("💦 H.rel: -- %")
-        import os
-        d = os.path.dirname(__file__)
-        self.__movie = QMovie(os.path.join(d, '../img/plant.gif'))
         self.__combo = QComboBox()
-        self.__times = []
-        self.__temps = []
+
+        # Señal bioeléctrica
+        self.__signal = SeñalBioeléctrica(frecuencia_hz=2)
+        self.__timer = QTimer()
+        self.__tiempos = []
+        self.__voltajes = []
+
+        # Ruta del gif
+        d = os.path.dirname(__file__)
+        self.__movie = QMovie(os.path.join(d, "../img/plant.gif"))
+
         self.setStyleSheet("""
             #rightPanel{background:#0f0f1f;}
             QFrame{background:#1a1a2e;}
@@ -45,27 +50,13 @@ class MainModule(Module):
                       border:1px solid #3b3b5e;border-radius:4px;}
         """)
 
-    def __load_saved_data(self):
-        try:
-            with open("temperatura_log.txt", "r") as f:
-                for line in f:
-                    parts = line.strip().split(", ")
-                    # if len(parts) == 2:
-                    timestamp = datetime.strptime(parts[0], "%Y-%m-%d %H:%M:%S")
-                    temp = float(parts[1])
-                    self.__times.append(timestamp)
-                    self.__temps.append(temp)
-        except FileNotFoundError:
-            pass
-
-    #@override
     def draw(self):
-        self.__load_saved_data()
-        self.__start_data_timer()
         self.__main_layout.setContentsMargins(0, 0, 0, 0)
         self.__main_layout.setSpacing(0)
         self.__left_layout.setContentsMargins(10, 10, 10, 10)
         self.__left_layout.setSpacing(10)
+
+        # Toolbar
         toolbar = QFrame()
         tb_layout = QHBoxLayout(toolbar)
         tb_layout.setSpacing(10)
@@ -80,30 +71,40 @@ class MainModule(Module):
             btn.clicked.connect(lambda _, p=path: print(f"{p} clicked"))
             tb_layout.addWidget(btn)
         self.__left_layout.addWidget(toolbar)
+
+        # Gráfica
         self.__canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.__left_layout.addWidget(self.__canvas, 1)
-        if self.__times and self.__temps:
-            self.__update_graph()
+        self.__ax.set_title("Señal Bioeléctrica en tiempo real (2 Hz)")
+        self.__ax.set_xlabel("Hora")
+        self.__ax.set_ylabel("Voltaje (V)")
+        self.__ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+        self.__ax.xaxis.set_major_locator(mdates.AutoDateLocator())
 
         self.__main_layout.addWidget(self.__left_frame, 3)
 
+        # Panel derecho
         self.__right_layout.setContentsMargins(15, 15, 15, 15)
         self.__right_layout.setSpacing(10)
+
+        # INFO (H.temp / H.suelo / H.rel)
         info = QHBoxLayout()
         self.__climate_label.setFont(fonts.TITLE)
         self.__soil_label.setFont(fonts.TITLE)
         self.__humid_label.setFont(fonts.TITLE)
-
         info.addWidget(self.__climate_label)
         info.addWidget(self.__soil_label)
         info.addWidget(self.__humid_label)
         self.__right_layout.addLayout(info)
 
+        # GIF planta
         gif = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        self.__movie.setSpeed(50)
         gif.setMovie(self.__movie)
+        self.__movie.setSpeed(50)
         self.__movie.start()
         self.__right_layout.addWidget(gif, 3)
+
+        # Combo + botón grabar
         ctr = QHBoxLayout()
         self.__combo.addItems(["C", "D", "E", "F", "G", "A", "B"])
         self.__combo.currentTextChanged.connect(lambda t: print(f"Tonalidad: {t}"))
@@ -115,42 +116,33 @@ class MainModule(Module):
         self.__right_layout.addLayout(ctr)
 
         self.__main_layout.addWidget(self.__right_frame, 1)
-
         self.setLayout(self.__main_layout)
 
-    def __update_graph(self):
-        self.__ax.plot(self.__times, self.__temps, marker="o")
-        self.__ax.set_title("Temperatura vs Hora del Día")
+        # Inicia gráfica en tiempo real
+        self.__iniciar_actualizacion()
+
+    def __iniciar_actualizacion(self):
+        self.__timer.timeout.connect(self.__actualizar_grafica)
+        self.__timer.start(50)
+
+    def __actualizar_grafica(self):
+        tiempo, voltaje = self.__signal.siguiente_valor()
+        self.__tiempos.append(tiempo)
+        self.__voltajes.append(voltaje)
+
+        ventana = timedelta(seconds=5)
+        corte = tiempo - ventana
+        while self.__tiempos and self.__tiempos[0] < corte:
+            self.__tiempos.pop(0)
+            self.__voltajes.pop(0)
+
+        self.__ax.clear()
+        self.__ax.plot(self.__tiempos, self.__voltajes, color="#6BA568")
+        self.__ax.set_title("Señal Bioeléctrica en tiempo real (2 Hz)")
         self.__ax.set_xlabel("Hora")
-        self.__ax.set_ylabel("°C")
-        self.__ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-        self.__ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        self.__ax.set_ylabel("Voltaje (V)")
+        self.__ax.set_ylim(-1.2, 1.2)
+        self.__ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S.%f'))
+        self.__ax.set_xlim(left=corte, right=tiempo)
         self.__fig.autofmt_xdate()
         self.__canvas.draw()
-
-    def __start_data_timer(self):
-        self.__timer.timeout.connect(self.__fetch_and_update)
-        self.__timer.start(5000)
-
-    def __fetch_and_update(self):
-        try:
-            r = requests.get(FIREBASE_PLANTA_URL, timeout=3)
-            if r.status_code == 200:
-                data = r.json() or {}
-                t = data.get("temperatura")
-                hs = data.get("humedad_suelo")
-                hr = data.get("humedad")
-                if t is not None and hs is not None and hr is not None:
-                    self.__climate_label.setText(f"🌡️ Temp: {t} °C")
-                    self.__soil_label.setText(f"💧 H.suelo: {hs} %")
-                    self.__humid_label.setText(f"💦 H.rel: {hr} %")
-                    now = datetime.now()
-                    self.__times.append(now)
-                    self.__temps.append(t)
-
-                    with open("temperatura_log.txt", "a") as f:
-                        f.write(f"{now.strftime('%Y-%m-%d %H:%M:%S')}, {t}\n")
-
-                    self.__update_graph()
-        except Exception as e:
-            print("Error fetching data:", e)

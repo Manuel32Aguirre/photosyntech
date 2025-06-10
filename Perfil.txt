@@ -1,0 +1,21 @@
+# Perfil de Planta
+
+nombre=Duranta
+nombre_cientifico=Duranta erecta
+descripcion=Planta ornamental común en jardines, resistente al sol directo y de crecimiento rápido.
+
+# Rango ideal para humedad del suelo (%)
+humedad_suelo_min=40
+humedad_suelo_max=70
+
+# Rango ideal para humedad relativa del ambiente (%)
+humedad_relativa_min=50
+humedad_relativa_max=80
+
+# Rango ideal para iluminación (lux)
+iluminacion_min=300
+iluminacion_max=800
+
+# Rango esperado de señal bioeléctrica (voltios)
+voltaje_min=0.5
+voltaje_max=1.5
