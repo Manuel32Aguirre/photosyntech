@@ -1,61 +1,67 @@
 import serial
 import matplotlib.pyplot as plt
 import time
+import threading
+from collections import deque
 
-# ⚠️ Cambia esto por el puerto COM correcto
-puerto_serial = 'COM7'      # ← por ejemplo: COM4, COM5, etc.
+# Configuración
+puerto_serial = 'COM7'
 baudrate = 115200
-
-# Configuración de lectura
-frecuencia_muestreo = 60
+frecuencia_muestreo = 200
 intervalo = 1 / frecuencia_muestreo
-ventana_muestras = 120
+ventana_muestras = 400
 
-# Intentar abrir el puerto serial
-try:
-    ser = serial.Serial(puerto_serial, baudrate, timeout=1)
-except serial.SerialException as e:
-    raise RuntimeError(f"No se pudo abrir el puerto serial {puerto_serial}: {e}")
+offset = 1.7        # en volts
+ganancia = 5.94
 
-# Inicializar buffers
-tiempo = [i * intervalo for i in range(ventana_muestras)]
-voltajes = [0.0] * ventana_muestras
+voltajes = deque([0.0] * ventana_muestras, maxlen=ventana_muestras)
+tiempos = deque([i * intervalo for i in range(ventana_muestras)], maxlen=ventana_muestras)
+start_time = time.time()
 
-# Gráfica interactiva
+# Hilo para lectura serial
+def leer_serial():
+    try:
+        ser = serial.Serial(puerto_serial, baudrate, timeout=1)
+    except serial.SerialException as e:
+        print(f"Error al abrir el puerto: {e}")
+        return
+
+    while True:
+        try:
+            linea = ser.readline().decode('utf-8', errors='ignore').strip()
+            if linea:
+                voltaje_crudo = float(linea)
+                voltajes.append(voltaje_crudo)
+                tiempos.append(time.time() - start_time)
+        except Exception:
+            continue
+
+# Hilo de lectura
+hilo_serial = threading.Thread(target=leer_serial, daemon=True)
+hilo_serial.start()
+
+# Configurar gráfica
 plt.ion()
 fig, ax = plt.subplots(figsize=(10, 4))
-line, = ax.plot(tiempo, voltajes, label='Señal ADC GPIO32 (ESP32)')
-ax.set_ylim(0, 3.3)
+linea, = ax.plot(list(tiempos), list(voltajes), label='Señal reconstruida (mV)')
+ax.set_ylim(-500, 500)
 ax.set_xlabel('Tiempo (s)')
-ax.set_ylabel('Voltaje (V)')
-ax.set_title('Lectura de señal en tiempo real desde ESP32')
+ax.set_ylabel('Voltaje estimado (mV)')
+ax.set_title('Señal bioeléctrica en tiempo real (reconstruida)')
 ax.grid(True)
 ax.legend()
 
-start_time = time.time()
-
-# Bucle de lectura y graficación
+# Bucle de actualización
 try:
     while True:
-        linea = ser.readline().decode('utf-8').strip()
-        if linea:
-            try:
-                voltaje = float(linea)
-                voltajes.pop(0)
-                voltajes.append(voltaje)
-
-                t = time.time() - start_time
-                tiempo = [t - (ventana_muestras - i) * intervalo for i in range(ventana_muestras)]
-
-                line.set_ydata(voltajes)
-                line.set_xdata(tiempo)
-                ax.set_xlim(tiempo[0], tiempo[-1])
-                fig.canvas.draw()
-                fig.canvas.flush_events()
-                time.sleep(intervalo)
-            except ValueError:
-                continue
+        voltajes_mv = [((v - offset) / ganancia) * 1000 for v in voltajes]
+        linea.set_ydata(voltajes_mv)
+        linea.set_xdata(list(tiempos))
+        ax.set_xlim(tiempos[0], tiempos[-1])
+        if voltajes_mv:
+            print(f"Vreal = {voltajes_mv[-1]:.2f} mV")
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+        time.sleep(intervalo)
 except KeyboardInterrupt:
-    print("Interrumpido por el usuario.")
-finally:
-    ser.close()
+    print("Interrumpido.")
