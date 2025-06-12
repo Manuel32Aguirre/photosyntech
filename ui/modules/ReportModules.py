@@ -1,9 +1,11 @@
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton
 )
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt
+
 from ui.modules.Module import Module
+
 
 class ReportModule(Module):
     def draw(self):

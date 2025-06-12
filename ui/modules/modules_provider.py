@@ -5,11 +5,6 @@ from controller.GetWeatherApi import GetWeatherApi
 from ui.modules.GraphsModule import GraphsModule
 from ui.modules.MainModule import MainModule
 from ui.modules.Module import Module
-from ui.modules.MainModule import MainModule
-from ui.modules.GraphsModule import GraphsModule
-from ui.modules.ReportModules import ReportModule
-from ui.modules.ConfigModule import ConfigModule  # ✅ Importar el bueno
-
 from ui.modules.SettingsModule import SettingsModule
 
 

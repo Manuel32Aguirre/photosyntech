@@ -1,6 +1,7 @@
-import serial
 import threading
-import time
+
+import serial
+
 
 class SensorReader:
     def __init__(self, puerto='COM9', baudrate=115200):

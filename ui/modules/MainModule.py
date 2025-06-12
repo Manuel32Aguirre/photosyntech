@@ -1,17 +1,17 @@
+import os
+
+import matplotlib.pyplot as plt
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QMovie
 from PyQt6.QtWidgets import (
     QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabel, QComboBox
 )
-from PyQt6.QtGui import QMovie
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.lines import Line2D
 
 from ui.IconButton import IconButton
 from ui.fonts import fonts
 from ui.modules.Module import Module
 from ui.modules.getBioelectricalSignal import SeñalBioeléctrica
-import os
 
 
 class MainModule(Module):
@@ -148,3 +148,6 @@ class MainModule(Module):
         self.__soil_label.setText(f"💧 H.suelo: {soil}")
         self.__humid_label.setText(f"💦 H.rel: {hum}")
         self.__light_label.setText(f"🔆 Luz: {light} lux")
+
+    def __str__(self):
+        return 'Pantalla principal'
