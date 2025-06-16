@@ -5,10 +5,11 @@ import re
 from collections import deque
 
 class SeñalBioeléctrica:
-    def __init__(self, puerto='COM7', baudrate=115200, offset=1.7, ganancia=5.94):
+    def __init__(self, puerto='COM7', baudrate=115200, offset=1.695, ganancia=5.985):
         self.offset = offset
         self.ganancia = ganancia
-        self.buffer = deque(maxlen=1000)
+
+        self.buffer = deque(maxlen=5000)
         self.lock = threading.Lock()
         self.sensor_lock = threading.Lock()
         self.t0 = time.time()
@@ -19,7 +20,7 @@ class SeñalBioeléctrica:
         self.light = "--"
 
         try:
-            self.ser = serial.Serial(puerto, baudrate, timeout=1)
+            self.ser = serial.Serial(puerto, baudrate, timeout=2)
             self.hilo_lectura = threading.Thread(target=self.__leer_datos, daemon=True)
             self.hilo_lectura.start()
             print("Puerto serial abierto correctamente.")
@@ -28,35 +29,35 @@ class SeñalBioeléctrica:
             self.ser = None
 
     def __leer_datos(self):
-        time.sleep(2)  # Evita basura inicial
-
-        # Adaptado para reconocer números con o sin sufijos
+        time.sleep(2)
         patron = re.compile(
-            r'DATA:BIO:([0-9.]+),TEMP:([0-9\-]+),HUM:([0-9\-]+),SOIL:([0-9\-]+),LIGHT:([0-9\-]+)'
+            r'DATA:BIO:(-?[\d.]+),TEMP:([^,]+),HUM:([^,]+),SOIL:([^,]+),LIGHT:([^,]+)'
         )
 
         while True:
             try:
                 linea = self.ser.readline().decode('utf-8', errors='ignore').strip()
-
-                match = patron.match(linea)
-                if not match:
+                if not linea:
                     continue
 
-                bio, temp, hum, soil, light = match.groups()
+                match = patron.match(linea)
+                if match:
+                    volt_sin_calibrar, temp, hum, soil, light = match.groups()
+                    volt_sin_calibrar = float(volt_sin_calibrar)
 
-                voltaje_crudo = float(bio)
-                voltaje_mv = ((voltaje_crudo - self.offset) / self.ganancia) * 1000
-                tiempo_relativo = time.time() - self.t0
+                    # Calibrar con offset exacto y ganancia exacta
+                    volt_calibrado = (volt_sin_calibrar - self.offset) / self.ganancia
+                    voltaje_mv = volt_calibrado * 1000  # en milivoltios
 
-                with self.lock:
-                    self.buffer.append((tiempo_relativo, voltaje_mv))
+                    tiempo_relativo = time.time() - self.t0
+                    with self.lock:
+                        self.buffer.append((tiempo_relativo, voltaje_mv))
 
-                with self.sensor_lock:
-                    self.temp = temp
-                    self.hum = hum
-                    self.soil = soil
-                    self.light = light
+                    with self.sensor_lock:
+                        self.temp = temp
+                        self.hum = hum
+                        self.soil = soil
+                        self.light = light
 
             except Exception as e:
                 print(f"[ERROR] al procesar línea: {e}")

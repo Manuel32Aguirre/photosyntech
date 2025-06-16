@@ -3,12 +3,12 @@ from ui.modules.Module import Module
 from ui.modules.modules_provider import get_all_modules
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, señal_bio):
         super().__init__()
         self.setWindowTitle("PhotoSyntech v1.0")
         self.resize(1280, 720)
         self.__central = QTabWidget()
-        self.__tabs: list[Module] = get_all_modules()
+        self.__tabs: list[Module] = get_all_modules(señal_bio)
         self.__setup_ui()
         self.setStyleSheet("""
             QTabWidget::pane { border: none; }

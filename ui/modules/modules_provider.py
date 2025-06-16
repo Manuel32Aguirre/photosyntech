@@ -6,6 +6,8 @@ from ui.modules.MainModule import MainModule
 from ui.modules.GraphsModule import GraphsModule
 from ui.modules.ReportModules import ReportModule
 from ui.modules.ConfigModule import ConfigModule  # ✅ Importar el bueno
+from ui.modules.MainModule import MainModule
+from ui.modules.GraphsModule import GraphsModule
 
 
 # ------------ Módulo 5: Señales de planta ------------
@@ -17,11 +19,12 @@ class PlantSignalModule(Module):
 
 
 # ------------ Lista de módulos ------------
-def get_all_modules() -> list[Module]:
+def get_all_modules(señal_bio) -> list[Module]:
     return [
-        MainModule(),
-        GraphsModule(),
-        ConfigModule(),  # ✅ Usando el nuevo diseño
+        MainModule(señal_bio),
+        GraphsModule(señal_bio),
+        ConfigModule(),
         ReportModule(),
         PlantSignalModule()
     ]
+

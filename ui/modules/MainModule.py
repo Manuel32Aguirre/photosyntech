@@ -10,13 +10,13 @@ from matplotlib.lines import Line2D
 from ui.IconButton import IconButton
 from ui.fonts import fonts
 from ui.modules.Module import Module
-from ui.modules.getBioelectricalSignal import SeñalBioeléctrica
 import os
 
 
 class MainModule(Module):
-    def __init__(self):
+    def __init__(self, señal_bio):
         super().__init__()
+        self.__signal = señal_bio  # ✅ Usar instancia compartida
         self.__main_layout = QHBoxLayout()
         self.__left_frame = QFrame()
         self.__right_frame = QFrame()
@@ -31,7 +31,6 @@ class MainModule(Module):
         self.__light_label = QLabel("🔆 Luz: -- lux")
         self.__combo = QComboBox()
 
-        self.__signal = SeñalBioeléctrica()
         self.__timer = QTimer()
         self.__tiempos = []
         self.__voltajes = []
@@ -106,14 +105,13 @@ class MainModule(Module):
 
     def __iniciar_actualizacion(self):
         self.__timer.timeout.connect(self.__actualizar_grafica)
-        self.__timer.start(5)  # ← ahora cada 5 ms (200 Hz)
+        self.__timer.start(5)  # 200 Hz
         self.__sensor_timer.start(3000)
 
     def __actualizar_grafica(self):
         nuevos_tiempos = []
         nuevos_voltajes = []
 
-        # Recolectar todos los nuevos datos disponibles
         while True:
             tiempo, voltaje = self.__signal.siguiente_valor()
             if tiempo is None:
@@ -121,29 +119,24 @@ class MainModule(Module):
             nuevos_tiempos.append(tiempo)
             nuevos_voltajes.append(voltaje)
 
-        # Si no hay nuevos datos, salir
         if not nuevos_tiempos:
             return
 
         self.__tiempos.extend(nuevos_tiempos)
         self.__voltajes.extend(nuevos_voltajes)
 
-        # Ventana deslizante de 10 segundos
         ventana = 10.0
         corte = self.__tiempos[-1] - ventana
         while self.__tiempos and self.__tiempos[0] < corte:
             self.__tiempos.pop(0)
             self.__voltajes.pop(0)
 
-        # Actualizar datos de la línea
         self.__linea.set_data(self.__tiempos, self.__voltajes)
         self.__ax.set_xlim(max(0, corte), self.__tiempos[-1])
-        self.__canvas.draw_idle()  # ← más rápido que draw()
+        self.__canvas.draw_idle()
 
     def __actualizar_labels_sensores(self):
         temp, hum, soil, light = self.__signal.obtener_datos_sensores()
-        print("DEBUG:", temp, hum, soil, light)
-
         self.__climate_label.setText(f"\U0001F321️ Temp: {temp} °C")
         self.__soil_label.setText(f"💧 H.suelo: {soil}")
         self.__humid_label.setText(f"💦 H.rel: {hum}")
