@@ -31,9 +31,7 @@ class SensorReader:
                     with self.lock: self.soil = linea.split(":")[1].strip()
                 elif linea.startswith("LIGHT:"):
                     with self.lock: self.light = linea.split(":")[1].strip()
-                # Si no empieza con ninguna etiqueta, ignoramos la línea silenciosamente
             except Exception:
-                # Si ocurre un error de decodificación, simplemente se ignora
                 continue
 
     def obtener_datos(self):

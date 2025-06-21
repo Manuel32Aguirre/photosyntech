@@ -1,14 +1,14 @@
 import sys
 from PyQt6.QtWidgets import QApplication
-
 from ui.MainWindow import MainWindow
-from ui.modules.getBioelectricalSignal import SeñalBioeléctrica  # ← IMPORTANTE
+from ui.modules.getBioelectricalSignal import SeñalBioeléctrica
+
+def main():
+    app = QApplication(sys.argv)
+    señal = SeñalBioeléctrica()
+    window = MainWindow(señal)
+    window.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    señal = SeñalBioeléctrica()       # ← Crear solo una vez
-    window = MainWindow(señal)        # ← Pasarla al MainWindow
-    window.show()
-
-    sys.exit(app.exec())
+    main()

@@ -9,15 +9,6 @@ from ui.modules.ConfigModule import ConfigModule  # ✅ Importar el bueno
 from ui.modules.MainModule import MainModule
 from ui.modules.GraphsModule import GraphsModule
 
-
-# ------------ Módulo 5: Señales de planta ------------
-class PlantSignalModule(Module):
-    def draw(self):
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("Contenido de Señales de planta"))
-        self.setLayout(layout)
-
-
 # ------------ Lista de módulos ------------
 def get_all_modules(señal_bio) -> list[Module]:
     return [
@@ -25,6 +16,4 @@ def get_all_modules(señal_bio) -> list[Module]:
         GraphsModule(señal_bio),
         ConfigModule(),
         ReportModule(),
-        PlantSignalModule()
     ]
-

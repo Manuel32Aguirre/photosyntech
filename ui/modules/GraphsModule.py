@@ -7,7 +7,6 @@ from matplotlib.figure import Figure
 from matplotlib.dates import DateFormatter
 from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
 from ui.modules.Module import Module
-from ui.modules.getBioelectricalSignal import SeñalBioeléctrica
 from collections import deque
 import datetime
 import time
@@ -16,34 +15,32 @@ BG_COLOR     = "#1B1731"
 CARD_COLOR   = "#1A1D2E"
 ACCENT_GREEN = "#1DB954"
 TEXT_COLOR   = "white"
-VENTANA_SEGUNDOS = 60 
+VENTANA_SEGUNDOS = 60
+
+def parse_float(val):
+    try:
+        return float(val) if val != '--' else 0.0
+    except ValueError:
+        return 0.0
 
 class SensorDataUpdater(QThread):
     data_ready = pyqtSignal(float, float, float, float, datetime.datetime)
-    
+
     def __init__(self, signal_bio):
         super().__init__()
         self.signal_bio = signal_bio
         self.running = True
-        
+
     def run(self):
         while self.running:
-            # Obtener datos de los sensores
-            temp_str, hum_str, soil_str, light_str = self.signal_bio.obtener_datos_sensores()
-            
-            # Convertir a float con manejo de errores
-            try:
-                temp = float(temp_str) if temp_str != '--' else 0.0
-                hum = float(hum_str) if hum_str != '--' else 0.0
-                soil = float(soil_str) if soil_str != '--' else 0.0
-                light = float(light_str) if light_str != '--' else 0.0
-            except ValueError:
-                temp, hum, soil, light = 0.0, 0.0, 0.0, 0.0
-            
-            # Emitir datos con marca de tiempo
-            self.data_ready.emit(temp, hum, soil, light, datetime.datetime.now())
-            time.sleep(3)  # Actualizar cada 3 segundos
-    
+            temp_str, hum_str, light_str, soil_str = self.signal_bio.obtener_datos_sensores()
+            temp  = parse_float(temp_str)
+            hum   = parse_float(hum_str)
+            light = parse_float(light_str)
+            soil  = parse_float(soil_str)
+            self.data_ready.emit(temp, hum, light, soil, datetime.datetime.now())
+            time.sleep(3)
+
     def stop(self):
         self.running = False
         self.wait(1000)
@@ -78,22 +75,19 @@ class GraphsModule(Module):
         body = QHBoxLayout(spacing=24)
         root.addLayout(body)
 
-        self.graph_data = {}
-        self.buffer = {}
         grid = QGridLayout(spacing=24)
         body.addLayout(grid, stretch=3)
 
-        # Configurar gráficos con unidades correctas
         for name, label, color, pos in [
-            ("Temperatura", "°C",         "red",         (0, 0)),
-            ("Humedad Suelo", "%",        "dodgerblue",  (0, 1)),
-            ("Humedad Ambiente", "%",    "cyan",        (1, 0)),
-            ("Iluminación",   "Lux",      "gold",        (1, 1)),
+            ("Temperatura", "°C", "red", (0, 0)),
+            ("Humedad Ambiente", "%", "cyan", (0, 1)),
+            ("Iluminación", "Lux", "gold", (1, 0)),
+            ("Humedad Suelo", "%", "green", (1, 1))  # NUEVO gráfico
         ]:
             graph = self.create_graph(name, label, color)
             grid.addWidget(graph, *pos)
             self.buffer[name] = {"x": deque(maxlen=VENTANA_SEGUNDOS), "y": deque(maxlen=VENTANA_SEGUNDOS)}
-        
+
         card = QFrame(objectName="Card")
         card.setMinimumWidth(260)
         body.addWidget(card, stretch=1)
@@ -111,8 +105,11 @@ class GraphsModule(Module):
         v.addWidget(sub)
 
         self.lbl_info = QLabel(
-            "CDMX\nCiudad de México\n\n☁️  -- °C\n"
-            "Humedad: --%\nH. Suelo: --%\nLuz: -- lux\n"
+            "CDMX\nCiudad de México\n\n"
+            "🌡️  -- °C\n"
+            "💦 Humedad Amb: --%\n"
+            "🔆 Luz: -- lux\n"
+            "🌱 Humedad Suelo: --%\n"
             "Esperando datos..."
         )
         self.lbl_info.setStyleSheet("font-size: 15px; line-height: 1.3em;")
@@ -122,9 +119,8 @@ class GraphsModule(Module):
         v.addWidget(btn)
         v.addStretch()
 
-        # Iniciar actualización de datos en segundo plano
         self.start_data_updater()
-        
+
     def create_graph(self, title, ylabel, color):
         fig = Figure(facecolor=CARD_COLOR, figsize=(6, 4), dpi=100)
         canvas = FigureCanvas(fig)
@@ -153,83 +149,57 @@ class GraphsModule(Module):
         }
 
         return canvas
-    
+
     def start_data_updater(self):
-        """Inicia el hilo para recolectar datos de los sensores"""
         if not self.data_updater:
             self.data_updater = SensorDataUpdater(self.signal_bio)
             self.data_updater.data_ready.connect(self.update_graphs)
             self.data_updater.start()
-    
+
     def stop_data_updater(self):
-        """Detiene la recolección de datos al cerrar el módulo"""
         if self.data_updater and self.data_updater.isRunning():
             self.data_updater.stop()
-    
+
     def force_update(self):
-        """Forzar una actualización inmediata"""
-        if self.data_updater:
-            # Obtener datos actuales sin esperar al ciclo normal
-            temp_str, hum_str, soil_str, light_str = self.signal_bio.obtener_datos_sensores()
-            try:
-                temp = float(temp_str) if temp_str != '--' else 0.0
-                hum = float(hum_str) if hum_str != '--' else 0.0
-                soil = float(soil_str) if soil_str != '--' else 0.0
-                light = float(light_str) if light_str != '--' else 0.0
-                self.update_graphs(temp, hum, soil, light, datetime.datetime.now())
-            except ValueError:
-                pass
-    
-    def update_graphs(self, temp=0.0, hum=0.0, soil=0.0, light=0.0, timestamp=None):
-        """Actualiza los gráficos con nuevos datos"""
-        now = timestamp if timestamp else datetime.datetime.now()
-        
-        # Mapeo de datos a gráficos
+        temp_str, hum_str, light_str, soil_str = self.signal_bio.obtener_datos_sensores()
+        temp  = parse_float(temp_str)
+        hum   = parse_float(hum_str)
+        light = parse_float(light_str)
+        soil  = parse_float(soil_str)
+        self.update_graphs(temp, hum, light, soil, datetime.datetime.now())
+
+    def update_graphs(self, temp=0.0, hum=0.0, light=0.0, soil=0.0, timestamp=None):
+        now = timestamp or datetime.datetime.now()
+
         data_map = {
             "Temperatura": temp,
-            "Humedad Suelo": soil,
             "Humedad Ambiente": hum,
-            "Iluminación": light
+            "Iluminación": light,
+            "Humedad Suelo": soil
         }
 
         for title, value in data_map.items():
-            if title not in self.graph_data:
-                continue
-                
             buf = self.buffer[title]
             g = self.graph_data[title]
 
-            # Agregar nuevos datos al buffer
             buf["x"].append(now)
             buf["y"].append(value)
 
-            # Actualizar línea del gráfico
             g["line"].set_data(buf["x"], buf["y"])
-            
-            # Ajustar ejes si hay datos
-            if buf["x"]:
-                g["ax"].relim()
-                g["ax"].autoscale_view(scalex=False, scaley=True)
-                
-                # Ventana de tiempo deslizante
-                g["ax"].set_xlim(
-                    now - datetime.timedelta(seconds=VENTANA_SEGUNDOS),
-                    now
-                )
-            
-            # Redibujar el gráfico
+            g["ax"].relim()
+            g["ax"].autoscale_view(scalex=False, scaley=True)
+            g["ax"].set_xlim(now - datetime.timedelta(seconds=VENTANA_SEGUNDOS), now)
             g["canvas"].draw_idle()
 
-        # Actualizar panel de información
         self.lbl_info.setText(
             f"CDMX\nCiudad de México\n\n"
-            f"☁️  {temp:.1f} °C\n"
-            f"Humedad: {hum:.1f}%\n"
-            f"H. Suelo: {soil:.1f}%\n"
-            f"Luz: {light:.0f} lux\n"
+            f"🌡️  {temp:.1f} °C\n"
+            f"💦 Humedad Amb: {hum:.1f}%\n"
+            f"🔆 Luz: {light:.0f} lux\n"
+            f"🌱 Humedad Suelo: {soil:.1f}%\n"
             f"Actualizado: {now.strftime('%H:%M:%S')}"
         )
-    
+
     def closeEvent(self, event):
         self.stop_data_updater()
         super().closeEvent(event)

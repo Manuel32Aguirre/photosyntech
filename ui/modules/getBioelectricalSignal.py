@@ -5,70 +5,82 @@ import re
 from collections import deque
 
 class SeñalBioeléctrica:
-    def __init__(self, puerto='COM7', baudrate=115200, offset=1.695, ganancia=5.985):
+    def __init__(self, puerto='COM7', baudrate=115200, offset=1.695, ganancia=5.97):
         self.offset = offset
         self.ganancia = ganancia
 
-        self.buffer = deque(maxlen=5000)
-        self.lock = threading.Lock()
-        self.sensor_lock = threading.Lock()
-        self.t0 = time.time()
+        self.bufferDatos = deque(maxlen=5000)
+        self.bloqueoBuffer = threading.Lock()
+        self.bloqueoSensores = threading.Lock()
+        self.tiempoInicio = time.time()
 
-        self.temp = "--"
-        self.hum = "--"
-        self.soil = "--"
-        self.light = "--"
+        self.temperaturaActual = "--"
+        self.humedadActual = "--"
+        self.luzActual = "--"
+        self.humedadSueloActual = "--"  # NUEVO
 
         try:
-            self.ser = serial.Serial(puerto, baudrate, timeout=2)
-            self.hilo_lectura = threading.Thread(target=self.__leer_datos, daemon=True)
-            self.hilo_lectura.start()
+            self.serial = serial.Serial(puerto, baudrate, timeout=2)
+            self.hiloLectura = threading.Thread(target=self.__leerDatos, daemon=True)
+            self.hiloLectura.start()
             print("Puerto serial abierto correctamente.")
-        except serial.SerialException as e:
-            print(f"[ERROR] No se pudo abrir el puerto serial: {e}")
-            self.ser = None
+        except serial.SerialException as error:
+            print(f"[ERROR] No se pudo abrir el puerto serial: {error}")
+            self.serial = None
 
-    def __leer_datos(self):
+    def __leerDatos(self):
         time.sleep(2)
-        patron = re.compile(
-            r'DATA:BIO:(-?[\d.]+),TEMP:([^,]+),HUM:([^,]+),SOIL:([^,]+),LIGHT:([^,]+)'
-        )
+
+        patron_bio = re.compile(r'B:([-+]?\d*\.\d+|\d+)')
+        patron_sensores = re.compile(r'T:([^,]+),H:([^,]+),L:([^,]+),S:([^,]+)')  # actualizado
 
         while True:
             try:
-                linea = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                linea = self.serial.readline().decode('utf-8', errors='ignore').strip()
                 if not linea:
                     continue
 
-                match = patron.match(linea)
-                if match:
-                    volt_sin_calibrar, temp, hum, soil, light = match.groups()
-                    volt_sin_calibrar = float(volt_sin_calibrar)
+                # Señal bioeléctrica
+                match_bio = patron_bio.match(linea)
+                if match_bio:
+                    voltaje_bruto = float(match_bio.group(1))  # en voltios recibido
 
-                    # Calibrar con offset exacto y ganancia exacta
-                    volt_calibrado = (volt_sin_calibrar - self.offset) / self.ganancia
-                    voltaje_mv = volt_calibrado * 1000  # en milivoltios
+                    # Recuperar la señal original:
+                    voltaje_real = (voltaje_bruto - self.offset) / self.ganancia
 
-                    tiempo_relativo = time.time() - self.t0
-                    with self.lock:
-                        self.buffer.append((tiempo_relativo, voltaje_mv))
+                    # Convertir a milivoltios:
+                    voltaje_mv = voltaje_real * 1000
 
-                    with self.sensor_lock:
-                        self.temp = temp
-                        self.hum = hum
-                        self.soil = soil
-                        self.light = light
+                    tiempoRelativo = time.time() - self.tiempoInicio
 
-            except Exception as e:
-                print(f"[ERROR] al procesar línea: {e}")
+                    with self.bloqueoBuffer:
+                        self.bufferDatos.append((tiempoRelativo, voltaje_mv))
+                    continue
+
+                # Sensores
+                match_sens = patron_sensores.search(linea)
+                if match_sens:
+                    temp, hum, light, soil = match_sens.groups()
+
+                    with self.bloqueoSensores:
+                        self.temperaturaActual = temp
+                        self.humedadActual = hum
+                        self.luzActual = light
+                        self.humedadSueloActual = soil  # NUEVO
+                    continue
+
+            except Exception as error:
+                print(f"[ERROR] al procesar línea: {error}")
 
     def siguiente_valor(self):
-        with self.lock:
-            if self.buffer:
-                return self.buffer.popleft()
-            else:
-                return None, None
+        with self.bloqueoBuffer:
+            return self.bufferDatos.popleft() if self.bufferDatos else (None, None)
 
     def obtener_datos_sensores(self):
-        with self.sensor_lock:
-            return self.temp, self.hum, self.soil, self.light
+        with self.bloqueoSensores:
+            return (
+                self.temperaturaActual,
+                self.humedadActual,
+                self.luzActual,
+                self.humedadSueloActual 
+            )

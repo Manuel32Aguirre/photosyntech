@@ -3,13 +3,17 @@ from ui.modules.Module import Module
 from ui.modules.modules_provider import get_all_modules
 
 class MainWindow(QMainWindow):
-    def __init__(self, señal_bio):
+    def __init__(self, señalBio):
         super().__init__()
         self.setWindowTitle("PhotoSyntech v1.0")
         self.resize(1280, 720)
-        self.__central = QTabWidget()
-        self.__tabs: list[Module] = get_all_modules(señal_bio)
-        self.__setup_ui()
+
+        self.__widgetCentral = QTabWidget()
+        self.__modulos = get_all_modules(señalBio)
+
+        self.__configurarInterfaz()
+        self.setCentralWidget(self.__widgetCentral)
+
         self.setStyleSheet("""
             QTabWidget::pane { border: none; }
             QTabBar::tab {
@@ -25,18 +29,15 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    def __setup_ui(self):
-        tab_names = [
+    def __configurarInterfaz(self):
+        nombresDePestanas = [
             "Ventana principal",
             "Datos de sensores",
             "Configuración",
             "Análisis y reportes",
-            "Señales de planta"
         ]
 
-        for i, m in enumerate(self.__tabs):
-            m.draw()
-            name = tab_names[i] if i < len(tab_names) else f"Tab {i}"
-            self.__central.addTab(m, name)
-
-        self.setCentralWidget(self.__central)
+        for indice, modulo in enumerate(self.__modulos):
+            modulo.draw()
+            nombre = nombresDePestanas[indice] if indice < len(nombresDePestanas) else f"Pestaña {indice}"
+            self.__widgetCentral.addTab(modulo, nombre)
