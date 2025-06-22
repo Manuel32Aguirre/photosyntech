@@ -1,21 +1,21 @@
-from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, 
-    QWidget, QFrame, QSizePolicy, QFileDialog, QMessageBox
-)
-from PyQt6.QtGui import QPixmap
+import datetime
+import os
+import tempfile
+
+import numpy as np
 from PyQt6.QtCore import Qt
-from ui.modules.Module import Module
-import matplotlib.pyplot as plt
+from PyQt6.QtWidgets import (
+    QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton,
+    QFrame, QSizePolicy, QFileDialog, QMessageBox, QInputDialog, QWidget, QScrollArea
+)
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-import pandas as pd
-import os
-import datetime
-import numpy as np
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-import tempfile
+from reportlab.platypus import SimpleDocTemplate, Image, Paragraph, Spacer
+
+from ui.modules.Module import Module
+
 
 class ReportModule(Module):
     def __init__(self):
@@ -52,7 +52,7 @@ class ReportModule(Module):
 
         # Controles de selección
         ctr_layout = QHBoxLayout()
-        
+
         # Selector de sensor
         sensor_layout = QVBoxLayout()
         sensor_label = QLabel("Seleccionar sensor:")
@@ -64,7 +64,7 @@ class ReportModule(Module):
         sensor_layout.addWidget(sensor_label)
         sensor_layout.addWidget(self.sensor_combo)
         ctr_layout.addLayout(sensor_layout)
-        
+
         # Selector de período
         periodo_layout = QVBoxLayout()
         periodo_label = QLabel("Seleccionar período:")
@@ -76,7 +76,7 @@ class ReportModule(Module):
         periodo_layout.addWidget(periodo_label)
         periodo_layout.addWidget(self.periodo_combo)
         ctr_layout.addLayout(periodo_layout)
-        
+
         # Botón de generar
         self.btn_generar = QPushButton("Generar Reporte")
         self.btn_generar.setStyleSheet("""
@@ -94,10 +94,11 @@ class ReportModule(Module):
         self.btn_generar.setFixedWidth(150)
         self.btn_generar.clicked.connect(self.generar_reporte)
         ctr_layout.addWidget(self.btn_generar, alignment=Qt.AlignmentFlag.AlignBottom)
-        
+
         layout.addLayout(ctr_layout)
 
         # Área de gráficos
+        """
         self.grafico_frame = QFrame()
         self.grafico_frame.setStyleSheet("background-color: white; border-radius: 8px;")
         self.grafico_frame.setMinimumSize(600, 400)
@@ -109,28 +110,40 @@ class ReportModule(Module):
         grafico_layout.addWidget(self.canvas)
         
         layout.addWidget(self.grafico_frame)
+        """
+        self.scroll_area = QScrollArea()  # Guardar como atributo
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("background-color: white; border-radius: 8px;")
+
+        # Contenedor para el área de gráficos
+        self.grafico_container = QWidget()
+        self.grafico_container_layout = QVBoxLayout(self.grafico_container)
+        self.grafico_container_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.grafico_frame = QFrame()
+        self.grafico_frame.setMinimumSize(600, 400)
+        self.grafico_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        grafico_layout = QVBoxLayout(self.grafico_frame)
+        self.figura = Figure(figsize=(6, 4), dpi=100)
+        self.canvas = FigureCanvas(self.figura)
+        grafico_layout.addWidget(self.canvas)
+
+        # Añadir el gráfico al contenedor
+        self.grafico_container_layout.addWidget(self.grafico_frame)
+
+        # Configurar el widget contenedor en el scroll
+        self.scroll_area.setWidget(self.grafico_container)
+
+        # Añadir el scroll al layout principal (en lugar del gráfico frame directamente)
+        layout.addWidget(self.scroll_area)
 
         # Botones de acción
         btn_layout = QHBoxLayout()
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.share_btn = QPushButton("Compartir Reporte")
-        self.share_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 4px;
-                margin-right: 10px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
-        self.share_btn.setFixedWidth(180)
-        self.share_btn.clicked.connect(self.compartir_reporte)
-        
+
         self.download_btn = QPushButton("Descargar Reporte")
         self.download_btn.setStyleSheet("""
             QPushButton {
@@ -146,13 +159,13 @@ class ReportModule(Module):
         """)
         self.download_btn.setFixedWidth(180)
         self.download_btn.clicked.connect(self.descargar_reporte)
+
         
-        btn_layout.addWidget(self.share_btn)
         btn_layout.addWidget(self.download_btn)
         layout.addLayout(btn_layout)
 
         self.setLayout(layout)
-        
+
         # Cargar nombre de la planta desde el perfil
         self.cargar_nombre_planta()
 
@@ -172,11 +185,11 @@ class ReportModule(Module):
         """Carga datos de un sensor específico desde el archivo TXT"""
         archivo = os.path.join(self.directorio_historial, f"{sensor}.txt")
         datos = []
-        
+
         if not os.path.exists(archivo):
             print(f"Archivo no encontrado: {archivo}")
             return datos
-        
+
         try:
             with open(archivo, "r", encoding="utf-8") as f:
                 for linea in f:
@@ -185,7 +198,7 @@ class ReportModule(Module):
                         try:
                             timestamp = datetime.datetime.strptime(partes[0], "%Y-%m-%d %H:%M:%S")
                             valor = float(partes[1])
-                            
+
                             # Filtrar por fecha si es necesario
                             if dias > 0:
                                 limite = datetime.datetime.now() - datetime.timedelta(days=dias)
@@ -197,51 +210,51 @@ class ReportModule(Module):
                             continue
         except Exception as e:
             print(f"Error al leer archivo {archivo}: {e}")
-        
+
         return datos
-        
+
     def generar_reporte(self):
         """Genera el reporte gráfico según las selecciones"""
         sensor_seleccionado = self.sensor_combo.currentText()
         periodo_seleccionado = self.periodo_combo.currentText()
         dias = self.periodos.get(periodo_seleccionado, 30)
-        
+
         # Limpiar figura anterior
         self.figura.clear()
-        
+
         if sensor_seleccionado == "Todos los sensores":
             ax = self.figura.subplots(2, 2)
             self.figura.set_size_inches(10, 8)
             self.figura.subplots_adjust(hspace=0.4, wspace=0.3)
-            
+
             for i, sensor in enumerate(self.sensores):
                 datos = self.cargar_datos_sensor(sensor, dias)
                 if not datos:
                     continue
-                
+
                 fechas = [d[0] for d in datos]
                 valores = [d[1] for d in datos]
-                
+
                 row = i // 2
                 col = i % 2
-                
+
                 # Calcular estadísticas
                 media = np.mean(valores)
                 maximo = np.max(valores)
                 minimo = np.min(valores)
-                
+
                 ax[row, col].plot(fechas, valores, 'o-', markersize=3)
                 ax[row, col].set_title(self.nombres_sensores[sensor])
                 ax[row, col].set_ylabel("Valor")
                 ax[row, col].grid(True, linestyle='--', alpha=0.7)
                 ax[row, col].tick_params(axis='x', rotation=45)
-                
+
                 # Añadir estadísticas
                 ax[row, col].axhline(media, color='r', linestyle='--', label=f'Media: {media:.2f}')
                 ax[row, col].axhline(maximo, color='g', linestyle=':', label=f'Máx: {maximo:.2f}')
                 ax[row, col].axhline(minimo, color='b', linestyle=':', label=f'Mín: {minimo:.2f}')
                 ax[row, col].legend()
-                
+
             self.figura.suptitle(f"Reporte de Sensores - {self.planta_nombre}\nPeríodo: {periodo_seleccionado}", fontsize=16)
         else:
             # Buscar el sensor correspondiente al nombre seleccionado
@@ -250,43 +263,43 @@ class ReportModule(Module):
                 if value == sensor_seleccionado:
                     sensor_key = key
                     break
-            
+
             if sensor_key:
                 datos = self.cargar_datos_sensor(sensor_key, dias)
                 if not datos:
                     QMessageBox.warning(self, "Sin datos", f"No se encontraron datos para {sensor_seleccionado} en el período seleccionado.")
                     return
-                
+
                 fechas = [d[0] for d in datos]
                 valores = [d[1] for d in datos]
-                
+
                 # Calcular estadísticas
                 media = np.mean(valores)
                 maximo = np.max(valores)
                 minimo = np.min(valores)
                 desviacion = np.std(valores)
-                
+
                 ax = self.figura.subplots()
                 self.figura.set_size_inches(10, 6)
-                
+
                 # Gráfico principal
                 ax.plot(fechas, valores, 'o-', markersize=3, label="Valores")
                 ax.axhline(media, color='r', linestyle='--', label=f'Media: {media:.2f}')
                 ax.axhline(maximo, color='g', linestyle=':', label=f'Máx: {maximo:.2f}')
                 ax.axhline(minimo, color='b', linestyle=':', label=f'Mín: {minimo:.2f}')
-                
+
                 # Área de desviación estándar
-                ax.fill_between(fechas, 
-                               [media - desviacion] * len(valores), 
-                               [media + desviacion] * len(valores), 
+                ax.fill_between(fechas,
+                               [media - desviacion] * len(valores),
+                               [media + desviacion] * len(valores),
                                color='gray', alpha=0.2, label='Desviación estándar')
-                
+
                 ax.set_title(f"{sensor_seleccionado} - {self.planta_nombre}\nPeríodo: {periodo_seleccionado}")
                 ax.set_ylabel("Valor")
                 ax.grid(True, linestyle='--', alpha=0.7)
                 ax.legend()
                 ax.tick_params(axis='x', rotation=45)
-                
+
                 # Estadísticas en texto
                 stats_text = (
                     f"Estadísticas:\n"
@@ -298,8 +311,20 @@ class ReportModule(Module):
                 )
                 ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
                         verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-        
+
         self.canvas.draw()
+        # 1. Actualizar geometría del canvas
+        self.canvas.updateGeometry()
+
+        # 2. Ajustar tamaño del contenedor
+        self.grafico_container.adjustSize()
+
+        # 3. Forzar actualización del área de scroll
+        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setWidgetResizable(True)
+
+        # 4. Opcional: mover scroll a la parte superior
+        self.scroll_area.verticalScrollBar().setValue(0)
 
     def exportar_imagen(self, ruta):
         """Exporta la figura actual como imagen"""
@@ -316,16 +341,16 @@ class ReportModule(Module):
             doc = SimpleDocTemplate(ruta, pagesize=letter)
             styles = getSampleStyleSheet()
             elementos = []
-            
+
             # Título
             titulo = Paragraph(f"<b>Reporte de Monitoreo - {self.planta_nombre}</b>", styles['Title'])
             elementos.append(titulo)
-            
+
             # Información del reporte
             periodo = self.periodo_combo.currentText()
             sensor = self.sensor_combo.currentText()
             fecha_generacion = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+
             info_text = f"""
             <b>Detalles del reporte:</b><br/>
             Sensor: {sensor}<br/>
@@ -335,17 +360,17 @@ class ReportModule(Module):
             info = Paragraph(info_text, styles['Normal'])
             elementos.append(info)
             elementos.append(Spacer(1, 12))
-            
+
             # Guardar gráfico temporalmente
             temp_img = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             self.exportar_imagen(temp_img.name)
             temp_img.close()
-            
+
             # Añadir gráfico al PDF
             img = Image(temp_img.name, width=450, height=300)
             elementos.append(img)
             elementos.append(Spacer(1, 12))
-            
+
             # Estadísticas detalladas (solo para un sensor)
             if sensor != "Todos los sensores":
                 sensor_key = None
@@ -353,20 +378,20 @@ class ReportModule(Module):
                     if value == sensor:
                         sensor_key = key
                         break
-                
+
                 if sensor_key:
                     datos = self.cargar_datos_sensor(
-                        sensor_key, 
+                        sensor_key,
                         self.periodos.get(self.periodo_combo.currentText(), 30)
                     )
-                    
+
                     if datos:
                         valores = [d[1] for d in datos]
                         media = np.mean(valores)
                         maximo = np.max(valores)
                         minimo = np.min(valores)
                         desviacion = np.std(valores)
-                        
+
                         stats_text = f"""
                         <b>Estadísticas detalladas:</b><br/>
                         Media: {media:.2f}<br/>
@@ -377,7 +402,7 @@ class ReportModule(Module):
                         """
                         stats = Paragraph(stats_text, styles['Normal'])
                         elementos.append(stats)
-            
+
             # Generar PDF
             doc.build(elementos)
             os.unlink(temp_img.name)  # Eliminar archivo temporal
@@ -395,26 +420,26 @@ class ReportModule(Module):
         if not self.figura or not self.canvas:
             QMessageBox.warning(self, "Error", "Primero debe generar un reporte.")
             return
-        
+
         opciones = ["Imagen PNG", "Reporte PDF"]
         opcion, ok = QInputDialog.getItem(
-            self, 
-            "Formato de descarga", 
-            "Seleccione el formato:", 
-            opciones, 
-            0, 
+            self,
+            "Formato de descarga",
+            "Seleccione el formato:",
+            opciones,
+            0,
             False
         )
-        
+
         if not ok:
             return
-        
+
         if opcion == "Imagen PNG":
             filtro = "Imágenes PNG (*.png)"
             ruta, _ = QFileDialog.getSaveFileName(
-                self, 
-                "Guardar Imagen", 
-                f"reporte_{self.planta_nombre}.png", 
+                self,
+                "Guardar Imagen",
+                f"reporte_{self.planta_nombre}.png",
                 filtro
             )
             if ruta:
@@ -424,13 +449,13 @@ class ReportModule(Module):
                     QMessageBox.information(self, "Éxito", f"Imagen guardada en:\n{ruta}")
                 else:
                     QMessageBox.critical(self, "Error", "No se pudo guardar la imagen.")
-        
+
         elif opcion == "Reporte PDF":
             filtro = "Documentos PDF (*.pdf)"
             ruta, _ = QFileDialog.getSaveFileName(
-                self, 
-                "Guardar Reporte PDF", 
-                f"reporte_completo_{self.planta_nombre}.pdf", 
+                self,
+                "Guardar Reporte PDF",
+                f"reporte_completo_{self.planta_nombre}.pdf",
                 filtro
             )
             if ruta:

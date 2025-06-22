@@ -16,7 +16,7 @@ import time
 import numpy as np
 import random
 
-UMBRAL_MIN = 10
+
 
 class MainModule(Module):
     def __init__(self, señal_bio):
@@ -33,6 +33,7 @@ class MainModule(Module):
         self.__right_frame.setObjectName("rightPanel")
         self.__left_layout = QVBoxLayout(self.__left_frame)
         self.__right_layout = QVBoxLayout(self.__right_frame)
+        self.__ultimo_tiempo_musica = time.time()  # Nuevo: para controlar cuándo poner música
 
         self.__fig, self.__ax = plt.subplots()
         self.__canvas = FigureCanvas(self.__fig)
@@ -300,11 +301,13 @@ class MainModule(Module):
         nuevos_tiempos, nuevos_voltajes = [], []
         while True:
             tiempo, voltaje = self.__signal.siguiente_valor()
-            if tiempo is None: break
+            if tiempo is None:
+                break
             nuevos_tiempos.append(tiempo)
             nuevos_voltajes.append(voltaje)
 
-        if not nuevos_tiempos: return
+        if not nuevos_tiempos:
+            return
 
         self.__tiempos.extend(nuevos_tiempos)
         self.__voltajes.extend(nuevos_voltajes)
@@ -318,6 +321,36 @@ class MainModule(Module):
         voltajes_filtrados = self.__signal.aplicar_filtros(np.array(self.__voltajes)).tolist()
         self.__linea.set_data(self.__tiempos, voltajes_filtrados)
 
+        # Música basada SOLO en la variación
+        ahora = time.time()
+        intervalo_musical = 5  # segundos entre cada acorde nuevo
+        self.__ultimo_tiempo_musica = time.time()  # para que empiece con un valor
+
+        if voltajes_filtrados and not self.__mute and not self.__cola_musica.full():
+            variacion = np.std(voltajes_filtrados)
+            print(
+                f"[DEBUG] Variación actual = {variacion:.2f} - Time now = {ahora:.1f} - Última música = {getattr(self, '__ultimo_tiempo_musica', 0):.1f}"
+            )
+
+            # Solo ponemos acorde si pasaron 5 seg
+            if ahora - getattr(self, "__ultimo_tiempo_musica", 0) >= intervalo_musical:
+                if variacion < 1:
+                    velocidad = "lento"
+                elif variacion < 3:
+                    velocidad = "medio"
+                else:
+                    velocidad = "rápido"
+
+                self.__cola_musica.put((self.__escala_actual, velocidad))
+                self.__ultimo_tiempo_musica = ahora
+
+                print(
+                    f"[🎵 ACTIVIDAD] --> PONIENDO ACORDE Variación={variacion:.2f} -> Velocidad={velocidad} - Escala: {self.__escala_actual} - Cola = {self.__cola_musica.qsize()}"
+                )
+            else:
+                print("[DEBUG] Esperando intervalo musical...")
+
+        # Actualizar gráfica
         if voltajes_filtrados:
             media = np.mean(voltajes_filtrados)
             self.__ax.set_ylim(media - 10, media + 10)
@@ -325,13 +358,8 @@ class MainModule(Module):
         self.__ax.set_xlim(max(0, corte), self.__tiempos[-1])
         self.__canvas.draw_idle()
 
-        # En __actualizar_grafica del MainModule
-        if voltajes_filtrados and not self.__mute:
-            voltaje_abs = abs(voltajes_filtrados[-1])
-            if voltaje_abs >= UMBRAL_MIN and not self.__cola_musica.full():
-                # Enviamos la escala actual a la cola musical
-                self.__cola_musica.put(self.__escala_actual)
-                print(f"[🎵 ACTIVIDAD] Voltaje={voltaje_abs:.1f} mV (Escala: {self.__escala_actual})")
+
+
 
     def cargar_frecuencias_sensores(self):
         try:
@@ -387,16 +415,16 @@ class MainModule(Module):
     def __hilo_musical_persistente(self):
         while True:
             try:
-                # Recibimos tanto el tipo de escala como la tonalidad
-                tipo_escala = self.__cola_musica.get(timeout=1)
+                tipo_escala, velocidad = self.__cola_musica.get(timeout=1)
                 if not self.__estado_musical_actual:
                     self.__estado_musical_actual = tipo_escala
                     tonalidad = self.__combo.currentText()
-                    # Pasamos ambos parámetros al sintetizador
                     sintesisMusical.tocar_progresion(
                         tonalidad=tonalidad, 
-                        tipo_escala=tipo_escala
+                        tipo_escala=tipo_escala,
+                        velocidad=velocidad
                     )
+
             except: continue
 
     def __toggle_musica(self):

@@ -46,9 +46,10 @@ class SensorDataUpdater(QThread):
         self.wait(1000)
 
 class GraphsModule(Module):
-    def __init__(self, signal_bio):
+    def __init__(self, signal_bio, main_module):
         super().__init__()
         self.signal_bio = signal_bio
+        self.main_module = main_module
         self.graph_data = {}
         self.buffer = {}
         self.data_updater = None
@@ -171,6 +172,9 @@ class GraphsModule(Module):
     def update_graphs(self, temp=0.0, hum=0.0, light=0.0, soil=0.0, timestamp=None):
         now = timestamp or datetime.datetime.now()
 
+        # OVERRIDE: Usar la humedad fake del MainModule
+        soil = float(self.main_module._MainModule__soil_fake_value)
+
         data_map = {
             "Temperatura": temp,
             "Humedad Ambiente": hum,
@@ -199,6 +203,7 @@ class GraphsModule(Module):
             f"🌱 Humedad Suelo: {soil:.1f}%\n"
             f"Actualizado: {now.strftime('%H:%M:%S')}"
         )
+
 
     def closeEvent(self, event):
         self.stop_data_updater()
