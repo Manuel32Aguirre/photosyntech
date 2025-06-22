@@ -82,12 +82,18 @@ def apagar_acorde(acorde):
     for nota in acorde:
         player.note_off(nota, 0, 0)
 
-def tocar_progresion(tipo_escala="mayor", velocidad="medio"):
+# sintesisMusical.py
+def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio"):
     global musica_activa
     musica_activa = True
-
-    while musica_activa:
+    
+    # Usar la tonalidad proporcionada o leer de configuración
+    if tonalidad is None:
         tonalidad = leer_tonalidad_config()
+    
+    print(f"🎼 Iniciando progresión en {tonalidad} {tipo_escala}")
+    
+    while musica_activa:
         tonos = escalas.get(tonalidad, escalas["C"])
         escala = tonos[0] if tipo_escala == "mayor" else tonos[1]
 

@@ -1,6 +1,6 @@
-tonalidad=D
-dispositivo=12
+tonalidad=C
+dispositivo=13
 frecuenciatemperatura=60
-frecuenciahumedad_relativa=3600
+frecuenciahumedad_relativa=60
 frecuenciailuminacion=60
 frecuenciahumedad_suelo=60
