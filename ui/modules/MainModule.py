@@ -15,7 +15,7 @@ import datetime
 import time
 import numpy as np
 import random
-
+import pygame.mixer  # por si no está ya importado en el MainModule
 
 
 class MainModule(Module):
@@ -34,6 +34,10 @@ class MainModule(Module):
         self.__left_layout = QVBoxLayout(self.__left_frame)
         self.__right_layout = QVBoxLayout(self.__right_frame)
         self.__ultimo_tiempo_musica = time.time()  # Nuevo: para controlar cuándo poner música
+                # Timer para actualizar bienestar y escala
+        self.__bienestar_timer = QTimer()
+        self.__bienestar_timer.timeout.connect(self.__actualizar_bienestar)
+        self.__bienestar_timer.start(5000)  # cada 5 segundos
 
         self.__fig, self.__ax = plt.subplots()
         self.__canvas = FigureCanvas(self.__fig)
@@ -340,6 +344,23 @@ class MainModule(Module):
                     velocidad = "medio"
                 else:
                     velocidad = "rápido"
+                # Actualizar bienestar antes de poner acorde
+                temp, hum, light, _soil = self.__signal.obtener_datos_sensores()
+
+                # Actualizar humedad fake
+                now = time.time()
+                if now - self.__soil_fake_last_update >= 60:
+                    self.__soil_fake_value = self.generar_humedad_suelo()
+                    self.__soil_fake_last_update = now
+
+                soil = self.__soil_fake_value
+
+                # Forzar actualización de bienestar y escala
+                try:
+                    total, estado = self.calcular_bienestar(temp, hum, light, soil)
+                    self.__estado_label.setText(estado)
+                except Exception as e:
+                    print(f"[ERROR actualizar_bienestar en grafica]: {e}")
 
                 self.__cola_musica.put((self.__escala_actual, velocidad))
                 self.__ultimo_tiempo_musica = ahora
@@ -359,6 +380,22 @@ class MainModule(Module):
         self.__canvas.draw_idle()
 
 
+    def __actualizar_bienestar(self):
+        temp, hum, light, _soil = self.__signal.obtener_datos_sensores()
+
+        # Actualizar humedad fake cada 60 segundos
+        now = time.time()
+        if now - self.__soil_fake_last_update >= 60:
+            self.__soil_fake_value = self.generar_humedad_suelo()
+            self.__soil_fake_last_update = now
+
+        soil = self.__soil_fake_value
+
+        try:
+            total, estado = self.calcular_bienestar(temp, hum, light, soil)
+            self.__estado_label.setText(estado)
+        except Exception as e:
+            print(f"[ERROR] __actualizar_bienestar(): {str(e)}")
 
 
     def cargar_frecuencias_sensores(self):
@@ -428,15 +465,34 @@ class MainModule(Module):
             except: continue
 
     def __toggle_musica(self):
+        
+        
         if self.__btn_toggle.isChecked():
+            # ACTIVAR MÚSICA
             self.__mute = False
             self.__btn_toggle.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "../img/stopMusic.png")))
+            
+            # Reanudar la lluvia
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            pygame.mixer.music.load("audio/rain.mp3")
+            pygame.mixer.music.set_volume(0.2)
+            pygame.mixer.music.play(-1)
+            
         else:
+            # DETENER MÚSICA
             sintesisMusical.detener_musica()
             self.__estado_musical_actual = None
             self.__mute = True
-            while not self.__cola_musica.empty(): self.__cola_musica.get()
+            
+            while not self.__cola_musica.empty():
+                self.__cola_musica.get()
+            
             self.__btn_toggle.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "../img/startMusic.ico")))
+
+            # Detener la lluvia
+            pygame.mixer.music.stop()
+
 
     def __actualizar_configuracion_txt(self, nueva_nota):
         try:
@@ -458,7 +514,24 @@ class MainModule(Module):
         if self.__btn_grabar.isChecked():
             self.__grabando = True
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.__filename = f"grabacion_{timestamp}.wav"
+            # Leer ruta de almacenamiento
+            ruta_almacenamiento = "grabaciones"  # por si acaso no hay configuracion
+            try:
+                if os.path.exists("configuracion.txt"):
+                    with open("configuracion.txt", "r", encoding="utf-8") as f:
+                        for linea in f:
+                            if linea.lower().startswith("rutaalmacenamiento="):
+                                ruta_almacenamiento = linea.split("=", 1)[1].strip()
+                                break
+            except Exception as e:
+                print(f"[⚠️] No se pudo leer rutaalmacenamiento: {e}")
+
+            # Asegurar que la ruta exista
+            os.makedirs(ruta_almacenamiento, exist_ok=True)
+
+            # Crear nombre final del archivo
+            self.__filename = os.path.join(ruta_almacenamiento, f"grabacion_{timestamp}.wav")
+            print(f"[🎙️] Guardando grabación en: {self.__filename}")
             self.__grab_start_time = datetime.datetime.now()
 
             self.__grab_label.setText("⏺️ 00:00")

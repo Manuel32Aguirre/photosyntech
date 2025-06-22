@@ -1,6 +1,7 @@
-tonalidad=C
+tonalidad=F
 dispositivo=13
 frecuenciatemperatura=60
 frecuenciahumedad_relativa=60
 frecuenciailuminacion=60
 frecuenciahumedad_suelo=60
+rutaalmacenamiento=

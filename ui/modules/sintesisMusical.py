@@ -108,10 +108,8 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio"):
 
             base_nota = escala[grado]
             
-            # Determinar la calidad del acorde basado en el grado
-            calidad = calidades[grado % 7]  # Usamos módulo para seguridad
+            calidad = calidades[grado % 7] 
             
-            # Generar el acorde con la calidad apropiada
             acorde = generar_acorde(base_nota, calidad)
 
             duracion = {
