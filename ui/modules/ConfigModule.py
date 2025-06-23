@@ -219,8 +219,16 @@ class ConfigModule(Module):
                 config_key = f"frecuencia{clave}".lower()
                 config[config_key] = str(segundos)
 
-            config["rutaalmacenamiento"] = self.txtRuta.text()
+            # ESTE ES EL FIX IMPORTANTE
+            ruta_actual = self.txtRuta.text().strip()
+            if not ruta_actual:
+                if "rutaalmacenamiento" not in config:
+                    config["rutaalmacenamiento"] = ""  # Si no existe, agrega vacía
+                # Si ya existe, NO tocarla (dejamos la que estaba en el archivo)
+            else:
+                config["rutaalmacenamiento"] = ruta_actual
 
+            # Ahora sí escribimos el archivo entero
             with open("configuracion.txt", "w", encoding="utf-8") as f:
                 for clave, valor in config.items():
                     f.write(f"{clave}={valor}\n")
@@ -230,6 +238,7 @@ class ConfigModule(Module):
         except Exception as e:
             print(f"Error al guardar configuraciones: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo guardar la configuración:\n{str(e)}")
+
 
     def __actualizar_frecuencia(self, sensor, combo):
         texto_seleccionado = combo.currentText()

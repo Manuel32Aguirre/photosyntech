@@ -1,18 +1,22 @@
 import pygame.midi
+import pygame.mixer
 import random
 import time
-import pygame.mixer
 import os
 
-pygame.mixer.init()
+player = None  # <--- inicializado en None
+
+
+# Inicializa solo el MIDI (esto sí es necesario)
 pygame.midi.init()
 
 player = pygame.midi.Output(0)
 player.set_instrument(92, channel=0)
 
-pygame.mixer.music.load("audio/rain.mp3")
-pygame.mixer.music.set_volume(0.2)
-pygame.mixer.music.play(-1)
+# ⛔️ OJO: NO arrancamos la lluvia aquí
+# pygame.mixer.init()
+# pygame.mixer.music.load("audio/rain.mp3")
+# pygame.mixer.music.play(-1)
 
 escalas = {
     "C":  ([60, 62, 64, 65, 67, 69, 71, 72], [60, 62, 63, 65, 67, 68, 70, 72]),
@@ -29,17 +33,15 @@ escalas = {
     "B":  ([71, 73, 75, 76, 78, 80, 82, 83], [71, 73, 74, 76, 78, 79, 81, 83]),
 }
 
-# Calidades de acorde por grado para cada modo
 calidades_acorde = {
     "mayor": ["mayor", "menor", "menor", "mayor", "mayor", "menor", "disminuido"],
     "menor": ["menor", "disminuido", "mayor", "menor", "menor", "mayor", "mayor"]
 }
 
-# Intervalos para cada tipo de acorde
 intervalos_acorde = {
-    "mayor": [0, 4, 7],      # Tónica, tercera mayor, quinta justa
-    "menor": [0, 3, 7],      # Tónica, tercera menor, quinta justa
-    "disminuido": [0, 3, 6]  # Tónica, tercera menor, quinta disminuida
+    "mayor": [0, 4, 7],
+    "menor": [0, 3, 7],
+    "disminuido": [0, 3, 6]
 }
 
 progressions = {
@@ -58,16 +60,21 @@ musica_activa = False
 RANGO_MIN = 48
 RANGO_MAX = 60
 
+# NUEVO: función para iniciar la lluvia SOLO cuando se le pida
+def iniciar_lluvia():
+    print("🌧️ Iniciando lluvia...")
+    pygame.mixer.music.load("audio/rain.mp3")
+    pygame.mixer.music.set_volume(0.2)
+    pygame.mixer.music.play(-1)
+
+
 def generar_acorde(base, calidad):
-    """Genera acorde según la calidad especificada"""
     if calidad not in intervalos_acorde:
-        calidad = "mayor"  # Valor por defecto si la calidad no es reconocida
-    
+        calidad = "mayor"
     acorde = [base + i for i in intervalos_acorde[calidad]]
     return ajustar_rango(acorde)
 
 def ajustar_rango(acorde):
-    """Ajusta el acorde al rango MIDI permitido"""
     while max(acorde) > RANGO_MAX:
         acorde = [n - 12 for n in acorde]
     while min(acorde) < RANGO_MIN:
@@ -82,12 +89,10 @@ def apagar_acorde(acorde):
     for nota in acorde:
         player.note_off(nota, 0, 0)
 
-# sintesisMusical.py
-def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio"):
+def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", evento_stop=None):
     global musica_activa
     musica_activa = True
     
-    # Usar la tonalidad proporcionada o leer de configuración
     if tonalidad is None:
         tonalidad = leer_tonalidad_config()
     
@@ -105,11 +110,15 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio"):
                 apagar_notas()
                 print("🛑 Música interrumpida")
                 return
+            
+            if evento_stop and evento_stop.is_set():
+                evento_stop.clear()
+                apagar_notas()
+                print("🔄 Cambio de tonalidad detectado, reiniciando progresión")
+                return
 
             base_nota = escala[grado]
-            
             calidad = calidades[grado % 7] 
-            
             acorde = generar_acorde(base_nota, calidad)
 
             duracion = {
@@ -122,11 +131,28 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio"):
             print(f"   Tonalidad: {tonalidad} - Modo: {tipo_escala}")
 
             tocar_acorde(acorde)
-            time.sleep(duracion)
+
+            sleep_time = 0
+            while sleep_time < duracion:
+                if evento_stop and evento_stop.is_set():
+                    evento_stop.clear()
+                    apagar_acorde(acorde)
+                    print("🔄 Cambio de tonalidad detectado durante acorde")
+                    return
+                time.sleep(0.1)
+                sleep_time += 0.1
+
             apagar_acorde(acorde)
 
             pausa = random.uniform(1.0, 3.0)
-            time.sleep(pausa)
+            sleep_pausa = 0
+            while sleep_pausa < pausa:
+                if evento_stop and evento_stop.is_set():
+                    evento_stop.clear()
+                    print("🔄 Cambio de tonalidad detectado durante pausa")
+                    return
+                time.sleep(0.1)
+                sleep_pausa += 0.1
 
 def detener_musica():
     global musica_activa
@@ -138,6 +164,47 @@ def detener_musica():
 def apagar_notas():
     player.write_short(0xB0, 120, 0)
     player.write_short(0xB0, 123, 0)
+
+def tocar_un_acorde(tonalidad=None, tipo_escala="mayor", variacion=0):
+    global player
+    if player is None:
+        print("🎹 Inicializando MIDI player...")
+        pygame.midi.init()
+        player = pygame.midi.Output(0)
+        player.set_instrument(92, channel=0)
+
+    tonos = escalas.get(tonalidad, escalas["C"])
+    escala = tonos[0] if tipo_escala == "mayor" else tonos[1]
+
+    progresion = random.choice(progressions.get(tipo_escala, progressions["mayor"]))
+    calidades = calidades_acorde[tipo_escala]
+
+    grado = random.choice(progresion)
+    base_nota = escala[grado]
+    calidad = calidades[grado % 7]
+
+    acorde = generar_acorde(base_nota, calidad)
+
+    if variacion < 1:
+        duracion = random.uniform(10.0, 12.0)
+    elif variacion < 3:
+        duracion = random.uniform(8.0, 10.0)
+    elif variacion < 6:
+        duracion = random.uniform(6.0, 8.0)
+    elif variacion < 10:
+        duracion = random.uniform(4.0, 6.0)
+    elif variacion < 15:
+        duracion = random.uniform(2.5, 4.0)
+    else:
+        duracion = random.uniform(1.5, 2.5)
+
+    print(f"\n🎵 Grado {grado + 1} ({calidad}) - Acorde: {acorde} - Dur: {duracion:.1f}s - Variacion: {variacion:.1f} mV")
+    print(f"   Tonalidad: {tonalidad} - Modo: {tipo_escala}")
+
+    tocar_acorde(acorde)
+    time.sleep(duracion)
+    apagar_acorde(acorde)
+
 
 def leer_tonalidad_config():
     try:
@@ -165,6 +232,3 @@ def main(tipo=None):
         apagar_notas()
         pygame.midi.quit()
         pygame.mixer.music.stop()
-
-if __name__ == "__main__":
-    main()
