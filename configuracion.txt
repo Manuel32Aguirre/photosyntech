@@ -1,6 +1,7 @@
-tonalidad=D
-dispositivo=0
+tonalidad=F#
+dispositivo=13
 frecuenciatemperatura=60
-frecuenciahumedad_relativa=3600
-frecuenciailuminacion=1800
-frecuenciahumedad_suelo=3600
+frecuenciahumedad_relativa=60
+frecuenciailuminacion=60
+frecuenciahumedad_suelo=60
+rutaalmacenamiento=C:/Users/vic-s/OneDrive/Desktop

@@ -144,23 +144,6 @@ class ReportModule(Module):
         btn_layout = QHBoxLayout()
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.share_btn = QPushButton("Compartir Reporte")
-        self.share_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 4px;
-                margin-right: 10px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
-        self.share_btn.setFixedWidth(180)
-        self.share_btn.clicked.connect(self.compartir_reporte)
-
         self.download_btn = QPushButton("Descargar Reporte")
         self.download_btn.setStyleSheet("""
             QPushButton {
@@ -177,7 +160,7 @@ class ReportModule(Module):
         self.download_btn.setFixedWidth(180)
         self.download_btn.clicked.connect(self.descargar_reporte)
 
-        btn_layout.addWidget(self.share_btn)
+        
         btn_layout.addWidget(self.download_btn)
         layout.addLayout(btn_layout)
 

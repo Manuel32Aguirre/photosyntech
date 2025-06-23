@@ -9,11 +9,11 @@ from ui.modules.ConfigModule import ConfigModule  # ✅ Importar el bueno
 from ui.modules.MainModule import MainModule
 from ui.modules.GraphsModule import GraphsModule
 
-# ------------ Lista de módulos ------------
 def get_all_modules(señal_bio) -> list[Module]:
+    main_module = MainModule(señal_bio)
     return [
-        MainModule(señal_bio),
-        GraphsModule(señal_bio),
+        main_module,
+        GraphsModule(señal_bio, main_module),
         ConfigModule(),
         ReportModule(),
     ]
