@@ -6,6 +6,9 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.dates import DateFormatter
 from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
+
+from controller.GetWeather import GetWeather
+from controller.WeatherWorker import WeatherWorker
 from ui.modules.Module import Module
 from collections import deque
 import datetime
@@ -46,13 +49,16 @@ class SensorDataUpdater(QThread):
         self.wait(1000)
 
 class GraphsModule(Module):
-    def __init__(self, signal_bio, main_module):
+    def __init__(self, signal_bio, main_module, weather: GetWeather):
         super().__init__()
         self.signal_bio = signal_bio
         self.main_module = main_module
         self.graph_data = {}
         self.buffer = {}
         self.data_updater = None
+        self.__weather = weather
+        self.__worker_thread = None
+        self.__worker = None
 
     def draw(self):
         self.setStyleSheet(f"""
@@ -116,7 +122,7 @@ class GraphsModule(Module):
         self.lbl_info.setStyleSheet("font-size: 15px; line-height: 1.3em;")
         v.addWidget(self.lbl_info)
 
-        btn = QPushButton("Actualizar ahora", clicked=self.force_update)
+        btn = QPushButton("Actualizar ahora", clicked=self.__update_weather_data)
         v.addWidget(btn)
         v.addStretch()
 
@@ -194,16 +200,22 @@ class GraphsModule(Module):
             g["ax"].autoscale_view(scalex=False, scaley=True)
             g["ax"].set_xlim(now - datetime.timedelta(seconds=VENTANA_SEGUNDOS), now)
             g["canvas"].draw_idle()
-
+        info = self.__weather.get_weather()
         self.lbl_info.setText(
-            f"CDMX\nCiudad de México\n\n"
-            f"🌡️  {temp:.1f} °C\n"
-            f"💦 Humedad Amb: {hum:.1f}%\n"
-            f"🔆 Luz: {light:.0f} lux\n"
-            f"🌱 Humedad Suelo: {soil:.1f}%\n"
-            f"Actualizado: {now.strftime('%H:%M:%S')}"
+            f"{info.city}\n{info.region}\n\n"
+            f"🌡️  {info.temperature} °C\n"
+            f"💦 {info.condition}\n"
+            f"Actualizado: {info.last_updated}"
         )
 
+    def __update_weather_data(self):
+        info = self.__weather.get_weather()
+        self.lbl_info.setText(
+            f"{info.city}\n{info.region}\n\n"
+            f"🌡️  {info.temperature} °C\n"
+            f"💦 {info.condition}\n"
+            f"Actualizado: {info.last_updated}"
+        )
 
     def closeEvent(self, event):
         self.stop_data_updater()
