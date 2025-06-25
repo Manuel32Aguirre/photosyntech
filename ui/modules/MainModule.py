@@ -103,7 +103,7 @@ class MainModule(Module):
         self.__left_layout.addWidget(toolbar)
         self.__canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.__left_layout.addWidget(self.__canvas, 1)
-        self.__ax.set_title("Señal Bioeléctrica en tiempo real (200 Hz)")
+        self.__ax.set_title("Señal Bioeléctrica en tiempo real")
         self.__ax.set_xlabel("Tiempo (s)")
         self.__ax.set_ylabel("Voltaje estimado (mV)")
         self.__ax.set_ylim(-20, 20)
