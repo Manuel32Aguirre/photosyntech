@@ -1,101 +1,95 @@
-import sounddevice as sd
-import soundfile as sf
+import matplotlib.pyplot as plt
+from scipy.signal import iirnotch, filtfilt, butter
 import numpy as np
-import keyboard
-import threading
-import queue
-import datetime
 import time
+import threading
 
-# CONFIG
-DEVICE_ID = 13  # <-- Tu dispositivo que sí graba el sistema
-SAMPLERATE = 44100
-CHANNELS = 2
+# === Configuración ===
+fs = 200  # frecuencia de muestreo
+duracion = 30  # segundos
+total_muestras = fs * duracion
 
-# Globals
-grabando = False
-evento_detener = threading.Event()
-cola_audio = queue.Queue()
-hilo_grabacion = None
+# === Simulador limpio (sin ruido)
+def obtener_valor_bioelectrico():
+    return -100  # valor constante en mV
 
-def callback(indata, frames, time_info, status):
-    if status:
-        print(f"[⚠️] Grabación: {status}")
-    if grabando:
-        cola_audio.put(indata.copy())
+# === Guardar eventos cuando presionas ENTER ===
+eventos_segundos = []
+inicio_tiempo = None
 
-def grabar_audio():
-    global evento_detener
-    evento_detener.clear()
-
-    print(f"[🎙️] Abriendo stream en dispositivo {DEVICE_ID}...")
-    
-    try:
-        with sd.InputStream(
-            device=DEVICE_ID,
-            samplerate=SAMPLERATE,
-            channels=CHANNELS,
-            dtype='float32',
-            callback=callback
-        ):
-            print("[INFO] Stream iniciado")
-            
-            while grabando:
-                sd.sleep(100)
-            
-            print("[🛑] Stream detenido")
-    
-    except Exception as e:
-        print(f"[❌] Error grabación: {str(e)}")
-
-def guardar_audio():
-    if cola_audio.empty():
-        print("[⚠️] No se grabó ningún audio.")
-        return
-
-    frames = []
-    while not cola_audio.empty():
-        frames.append(cola_audio.get())
-
-    audio_final = np.concatenate(frames, axis=0)
-    
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"grabacion_{timestamp}.wav"
-    
-    sf.write(filename, audio_final, SAMPLERATE)
-    print(f"[✅] Grabado: {filename}")
-
-def main():
-    global grabando, hilo_grabacion
-    
-    print("Presiona ESPACIO para iniciar la grabación.")
-    print("Vuelve a presionar ESPACIO para detener, guardar y salir.")
-    
-    # Esperar primer espacio
+def registrar_evento():
+    global eventos_segundos
+    print("Presiona Enter cuando toques o quites el dedo.")
     while True:
-        if keyboard.is_pressed('space'):
-            print("[🎙️] ¡Grabando!")
-            grabando = True
-            hilo_grabacion = threading.Thread(target=grabar_audio, daemon=True)
-            hilo_grabacion.start()
-            
-            while keyboard.is_pressed('space'):  # Debounce
-                time.sleep(0.1)
-            
-            break
-        time.sleep(0.1)
-    
-    # Ahora está grabando...
-    while True:
-        if keyboard.is_pressed('space'):
-            print("[🛑] Parando y saliendo...")
-            grabando = False
-            if hilo_grabacion and hilo_grabacion.is_alive():
-                hilo_grabacion.join()
-            guardar_audio()
-            break  # 🚀 salir del programa
-        
-        time.sleep(0.1)
+        input()
+        t_actual = time.time() - inicio_tiempo
+        eventos_segundos.append(round(t_actual, 2))
+        print(f"🕐 Evento registrado en segundo: {round(t_actual, 2)}")
 
-if __name__ == "__main__":
-    main()
+# === Filtros ===
+def aplicar_filtros(senal, fs):
+    # Notch 60 Hz
+    b60, a60 = iirnotch(60, Q=30, fs=fs)
+    senal = filtfilt(b60, a60, senal)
+    
+    # Notch 80 Hz
+    b80, a80 = iirnotch(80, Q=30, fs=fs)
+    senal = filtfilt(b80, a80, senal)
+    
+    # Pasa bajas 5 Hz
+    b_lp, a_lp = butter(4, 5, btype='low', fs=fs)
+    senal = filtfilt(b_lp, a_lp, senal)
+    
+    return senal
+
+# === Captura ===
+print("Iniciando captura de datos...")
+
+bio_signal = []
+inicio_tiempo = time.time()
+
+# Hilo para registrar eventos
+hilo_eventos = threading.Thread(target=registrar_evento, daemon=True)
+hilo_eventos.start()
+
+while len(bio_signal) < total_muestras:
+    valor = obtener_valor_bioelectrico()
+    bio_signal.append(valor)
+    time.sleep(1/fs)
+
+print("✅ Captura finalizada.")
+
+# === Procesamiento ===
+tiempos = np.linspace(0, duracion, len(bio_signal))
+senal_filtrada = aplicar_filtros(bio_signal, fs)
+
+# === FFT ===
+fft = np.abs(np.fft.rfft(senal_filtrada))
+frecuencias = np.fft.rfftfreq(len(senal_filtrada), d=1/fs)
+
+# === Gráfica ===
+plt.figure(figsize=(12, 6))
+
+plt.subplot(2, 1, 1)
+plt.plot(tiempos, senal_filtrada, color='green')
+plt.title("Señal Bioeléctrica Filtrada + Eventos")
+plt.xlabel("Tiempo (s)")
+plt.ylabel("Voltaje (mV)")
+for evento in eventos_segundos:
+    plt.axvline(x=evento, color='red', linestyle='--', label='Evento' if evento == eventos_segundos[0] else "")
+if eventos_segundos:
+    plt.legend()
+
+plt.subplot(2, 1, 2)
+plt.plot(frecuencias, fft, color='purple')
+plt.title("FFT después de Filtros")
+plt.xlabel("Frecuencia (Hz)")
+plt.ylabel("Magnitud")
+
+plt.tight_layout()
+plt.show()
+
+# === Imprimir todos los eventos marcados ===
+print("\n📍 Eventos registrados en los segundos:")
+for e in eventos_segundos:
+    print(f"→ {e} s")

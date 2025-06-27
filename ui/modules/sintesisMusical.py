@@ -92,25 +92,36 @@ def apagar_acorde(acorde):
 def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", evento_stop=None):
     global musica_activa
     musica_activa = True
-    
+
     if tonalidad is None:
         tonalidad = leer_tonalidad_config()
-    
+
     print(f"🎼 Iniciando progresión en {tonalidad} {tipo_escala}")
-    
+
+    # Persistencia de progresiones no repetidas
+    if not hasattr(tocar_progresion, "progresiones_restantes"):
+        tocar_progresion.progresiones_restantes = {}
+
+    clave = (tonalidad, tipo_escala)
+    if clave not in tocar_progresion.progresiones_restantes or not tocar_progresion.progresiones_restantes[clave]:
+        todas = progressions.get(tipo_escala, progressions["mayor"])[:]
+        random.shuffle(todas)
+        tocar_progresion.progresiones_restantes[clave] = todas
+
+    progresion = tocar_progresion.progresiones_restantes[clave].pop()
+    calidades = calidades_acorde[tipo_escala]
+    tonos = escalas.get(tonalidad, escalas["C"])
+    escala = tonos[0] if tipo_escala == "mayor" else tonos[1]
+
+    print(f"🎹 Progresión seleccionada: {[grado + 1 for grado in progresion]}")
+
     while musica_activa:
-        tonos = escalas.get(tonalidad, escalas["C"])
-        escala = tonos[0] if tipo_escala == "mayor" else tonos[1]
-
-        progresion = random.choice(progressions.get(tipo_escala, progressions["mayor"]))
-        calidades = calidades_acorde[tipo_escala]
-
         for grado in progresion:
             if not musica_activa:
                 apagar_notas()
                 print("🛑 Música interrumpida")
                 return
-            
+
             if evento_stop and evento_stop.is_set():
                 evento_stop.clear()
                 apagar_notas()
@@ -118,7 +129,7 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
                 return
 
             base_nota = escala[grado]
-            calidad = calidades[grado % 7] 
+            calidad = calidades[grado % 7]
             acorde = generar_acorde(base_nota, calidad)
 
             duracion = {
@@ -132,27 +143,36 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
 
             tocar_acorde(acorde)
 
-            sleep_time = 0
-            while sleep_time < duracion:
+            tiempo = 0
+            while tiempo < duracion:
                 if evento_stop and evento_stop.is_set():
                     evento_stop.clear()
                     apagar_acorde(acorde)
                     print("🔄 Cambio de tonalidad detectado durante acorde")
                     return
                 time.sleep(0.1)
-                sleep_time += 0.1
+                tiempo += 0.1
 
             apagar_acorde(acorde)
 
             pausa = random.uniform(1.0, 3.0)
-            sleep_pausa = 0
-            while sleep_pausa < pausa:
+            pausa_tiempo = 0
+            while pausa_tiempo < pausa:
                 if evento_stop and evento_stop.is_set():
                     evento_stop.clear()
                     print("🔄 Cambio de tonalidad detectado durante pausa")
                     return
                 time.sleep(0.1)
-                sleep_pausa += 0.1
+                pausa_tiempo += 0.1
+
+        # Al terminar la progresión, se escoge una nueva para seguir
+        if not tocar_progresion.progresiones_restantes[clave]:
+            todas = progressions.get(tipo_escala, progressions["mayor"])[:]
+            random.shuffle(todas)
+            tocar_progresion.progresiones_restantes[clave] = todas
+
+        progresion = tocar_progresion.progresiones_restantes[clave].pop()
+
 
 def detener_musica():
     global musica_activa

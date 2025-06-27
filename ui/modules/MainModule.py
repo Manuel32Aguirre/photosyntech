@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import Qt, QTimer, QSize, QThread, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabel, QComboBox, QPushButton
 from PyQt6.QtGui import QMovie, QIcon
 import matplotlib.pyplot as plt
@@ -16,6 +16,90 @@ import numpy as np
 import random
 import pygame.mixer
 import queue
+from collections import deque
+
+class AudioRecorderThread(QThread):
+    """Thread separado para grabación de audio sin bloquear UI"""
+    grabacion_terminada = pyqtSignal(str)
+    error_grabacion = pyqtSignal(str)
+    
+    def __init__(self, filename, dispositivo_id=None, samplerate=44100):
+        super().__init__()
+        self.filename = filename
+        self.dispositivo_id = dispositivo_id
+        self.samplerate = samplerate
+        self.grabando = False
+        self.frames = []
+        
+    def run(self):
+        try:
+            def callback(indata, frames, time_info, status):
+                if status:
+                    print(f"[⚠️] Grabación: {status}")
+                if self.grabando:
+                    self.frames.append(indata.copy())
+            
+            with sd.InputStream(
+                device=self.dispositivo_id,
+                samplerate=self.samplerate,
+                channels=2,
+                dtype='float32',
+                callback=callback
+            ):
+                self.grabando = True
+                while self.grabando:
+                    self.msleep(100)  # Usar msleep en lugar de sd.sleep
+                    
+            # Guardar audio
+            if self.frames:
+                audio_final = np.concatenate(self.frames, axis=0)
+                sf.write(self.filename, audio_final, self.samplerate)
+                self.grabacion_terminada.emit(self.filename)
+            else:
+                self.error_grabacion.emit("No se grabó audio")
+                
+        except Exception as e:
+            self.error_grabacion.emit(str(e))
+    
+    def detener_grabacion(self):
+        self.grabando = False
+
+class MusicThread(QThread):
+    """Thread separado para música sin bloquear UI"""
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.activo = True
+        
+    def run(self):
+        while self.activo:
+            if self.parent._MainModule__mute or not self.parent._MainModule__musica_activa:
+                self.msleep(1000)
+                continue
+            
+            try:
+                tonalidad = self.parent.obtener_tonalidad_actual()
+                tipo_escala = self.parent._MainModule__escala_actual
+                
+                # Solo calcular variación si hay suficientes datos
+                if len(self.parent._MainModule__voltajes_buffer) >= 1500:
+                    voltajes_array = np.array(list(self.parent._MainModule__voltajes_buffer))
+                    variacion = np.std(voltajes_array[-50:])  # Solo últimos 50 valores
+                else:
+                    variacion = 0
+                    
+                sintesisMusical.tocar_un_acorde(
+                    tonalidad=tonalidad, 
+                    tipo_escala=tipo_escala, 
+                    variacion=variacion
+                )
+            except Exception as e:
+                print(f"Error en música: {e}")
+                
+            self.msleep(500)
+    
+    def detener(self):
+        self.activo = False
 
 class MainModule(Module):
     def __init__(self, señal_bio):
@@ -27,31 +111,50 @@ class MainModule(Module):
         self.__grab_timer.timeout.connect(self.__actualizar_tiempo_grabacion)
         self.__mute = False
         
-        self.__fig, self.__ax = plt.subplots()
+        # Optimización: Usar deques para datos con tamaño máximo
+        self.__tiempos_buffer = deque(maxlen=5000)  # ~25 segundos a 200Hz
+        self.__voltajes_buffer = deque(maxlen=5000)
+        
+        # Matplotlib optimizations
+        plt.ioff()  # Desactivar modo interactivo
+        self.__fig, self.__ax = plt.subplots(figsize=(8, 4), dpi=80)  # Reducir DPI
+        self.__fig.patch.set_facecolor('#1a1a2e')
+        self.__ax.set_facecolor('#1a1a2e')
         self.__canvas = FigureCanvas(self.__fig)
-        self.__linea, = self.__ax.plot([], [], color="#6BA568", linewidth=1)
-        self.__tiempos = []
-        self.__voltajes = []
-
+        self.__canvas.setMinimumSize(400, 200)
+        
+        # Optimizar línea de gráfica
+        self.__linea, = self.__ax.plot([], [], color="#6BA568", linewidth=1.5, alpha=0.8)
+        self.__ax.grid(True, alpha=0.3)
+        
+        # Timers optimizados
         self.__sensor_timer = QTimer()
         self.__sensor_timer.timeout.connect(self.__actualizar_labels_sensores)
+        
+        # Labels de sensores
         self.__climate_label = QLabel("🌡️ Temp: -- °C")
         self.__humid_label = QLabel("💦 H.rel: --")
         self.__light_label = QLabel("🔆 Luz: -- lux")
         self.__soil_label = QLabel("🌱 Hum.suelo: --")
         self.__estado_label = QLabel("😐 Estado: --")
+        
+        # Cache para datos falsos de suelo
         self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
         self.__soil_fake_last_update = time.time()
 
+        # Variables de música optimizadas
         self.__ultimo_tiempo_musica = time.time()
         self.__escala_actual = None
         self.__bienestar_timer = QTimer()
         self.__bienestar_timer.timeout.connect(self.__actualizar_bienestar)
-        self.__bienestar_timer.start(5000)
+        self.__bienestar_timer.start(10000)  # Reducir frecuencia a 10 segundos
         self.__musica_activa = True
         self.__bienestar_inicializado = False
-        self.__hilo_musica = None
+        self.__music_thread = None
         self.__ultima_tonalidad_usada = self.obtener_tonalidad_actual()
+        
+        # Thread de grabación
+        self.__audio_recorder = None
 
         # Layouts y frames
         self.__main_layout = QHBoxLayout()
@@ -61,15 +164,14 @@ class MainModule(Module):
         self.__left_layout = QVBoxLayout(self.__left_frame)
         self.__right_layout = QVBoxLayout(self.__right_frame)
 
-        # GIF
+        # GIF optimizado
         d = os.path.dirname(__file__)
         self.__movie = QMovie(os.path.join(d, "../img/plant.gif"))
+        self.__movie.setScaledSize(QSize(200, 200))  # Escalar GIF
 
-        # Botones
-        self.__setup_controles_musica(QHBoxLayout())  # crea self.__combo y self.__btn_toggle
-        self.__setup_controles_grabacion(QHBoxLayout())  # crea self.__btn_grabar
-
-        # Ahora sí, configuro UI
+        # Controles
+        self.__setup_controles_musica()
+        self.__setup_controles_grabacion()
         self.__setup_ui()
 
         # Sensores
@@ -80,6 +182,11 @@ class MainModule(Module):
         self.ultimo_guardado = {k: 0 for k in self.frecuencias_sensores}
         self.directorio_historial = "historialLecturas"
         os.makedirs(self.directorio_historial, exist_ok=True)
+        
+        # Cache para configuración
+        self.__config_cache = {}
+        self.__config_last_read = 0
+        
         self.cargar_frecuencias_sensores()
         self.perfil_planta = self.cargar_perfil_planta()
 
@@ -87,53 +194,72 @@ class MainModule(Module):
         self.setStyleSheet("""
             #rightPanel{background:#0f0f1f;}
             QFrame{background:#1a1a2e;}
-            QLabel{color:#e0e0e0;}
+            QLabel{color:#e0e0e0; font-family: Arial;}
             QComboBox{background:#1a1a2e;color:#e0e0e0;
-                      border:1px solid #3b3b5e;border-radius:4px;}
+                      border:1px solid #3b3b5e;border-radius:4px;
+                      padding: 4px;}
+            QPushButton{border-radius:25px;border:2px solid #3b3b5e;
+                       background:#1a1a2e;}
+            QPushButton:checked{background-color:#3b5e3b;}
         """)
+
+        # Optimización: Contador para reducir frecuencia de actualización de gráfica
+        self.__update_counter = 0
 
     def __setup_ui(self):
         self.__main_layout.setContentsMargins(0, 0, 0, 0)
         self.__main_layout.setSpacing(0)
 
-        # LEFT PANEL (gráfica)
+        # LEFT PANEL (gráfica) - Optimizado
         self.__left_layout.setContentsMargins(10, 10, 10, 10)
         self.__left_layout.setSpacing(10)
-        toolbar = QFrame()
-        self.__left_layout.addWidget(toolbar)
+        
+        # Canvas optimizado
         self.__canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.__left_layout.addWidget(self.__canvas, 1)
-        self.__ax.set_title("Señal Bioeléctrica en tiempo real")
-        self.__ax.set_xlabel("Tiempo (s)")
-        self.__ax.set_ylabel("Voltaje estimado (mV)")
+        
+        # Configurar axes una sola vez
+        self.__ax.set_title("Señal Bioeléctrica en tiempo real", color='white', fontsize=12)
+        self.__ax.set_xlabel("Tiempo (s)", color='white')
+        self.__ax.set_ylabel("Voltaje estimado (mV)", color='white')
+        self.__ax.tick_params(colors='white', labelsize=8)
         self.__ax.set_ylim(-20, 20)
         self.__ax.set_xlim(0, 5)
+        
         self.__main_layout.addWidget(self.__left_frame, 3)
 
-        # RIGHT PANEL (labels + gif + botones)
+        # RIGHT PANEL optimizado
         self.__right_layout.setContentsMargins(15, 15, 15, 15)
         self.__right_layout.setSpacing(10)
+        
+        # Info layout
         info = QVBoxLayout()
-        for label in [self.__climate_label, self.__humid_label, self.__light_label, self.__soil_label]:
+        labels = [self.__climate_label, self.__humid_label, self.__light_label, self.__soil_label]
+        for label in labels:
             label.setFont(fonts.TITLE)
+            label.setWordWrap(False)  # Evitar word wrap innecesario
             info.addWidget(label)
+        
         info.addWidget(self.__estado_label)
         self.__estado_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.__estado_label.setStyleSheet("font-size: 24px; color: #e0e0e0;")
+        self.__estado_label.setStyleSheet("font-size: 20px; color: #e0e0e0; font-weight: bold;")
         self.__right_layout.addLayout(info)
 
-        gif = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        gif.setMovie(self.__movie)
-        self.__movie.setSpeed(50)
+        # GIF optimizado
+        gif_label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
+        gif_label.setMovie(self.__movie)
+        gif_label.setMaximumSize(200, 200)
+        self.__movie.setSpeed(30)  # Reducir velocidad del GIF
         self.__movie.start()
-        self.__right_layout.addWidget(gif, 3)
+        self.__right_layout.addWidget(gif_label, 2)
 
+        # Label de grabación
         self.__grab_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.__grab_label.setStyleSheet("font-size:16px;color:red;")
+        self.__grab_label.setStyleSheet("font-size:16px;color:red;font-weight:bold;")
         self.__grab_label.hide()
         self.__right_layout.addWidget(self.__grab_label)
 
-        # Controles (combo tonalidad + grabar + toggle)
+        # Controles
         ctr = QHBoxLayout()
         ctr.addWidget(self.__combo)
         ctr.addWidget(self.__btn_grabar)
@@ -143,178 +269,248 @@ class MainModule(Module):
         self.__main_layout.addWidget(self.__right_frame, 1)
         self.setLayout(self.__main_layout)
 
-        # Timers
+        # Timers optimizados
         self.__timer = QTimer()
         self.__timer.timeout.connect(self.__actualizar_grafica)
-        self.__timer.start(5)
-        self.__sensor_timer.start(3000)
+        self.__timer.start(50)  # Reducir frecuencia de 5ms a 50ms
+        self.__sensor_timer.start(5000)  # Sensores cada 5 segundos
 
-    def __setup_controles_musica(self, ctr):
+    def __setup_controles_musica(self):
         self.__combo = QComboBox()
+        self.__combo.setMaximumWidth(80)
         tonalidades = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
         self.__combo.addItems(tonalidades)
         self.__combo.currentTextChanged.connect(self.__actualizar_configuracion_txt)
+        
         tonalidad_inicial = self.__leer_tonalidad_config()
         if tonalidad_inicial in tonalidades:
             self.__combo.setCurrentText(tonalidad_inicial)
+            
         d = os.path.dirname(__file__)
         self.__btn_toggle = QPushButton()
         self.__btn_toggle.setCheckable(True)
         self.__btn_toggle.setChecked(False)
         self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/stopMusic.png")))
-        self.__btn_toggle.setIconSize(QSize(50, 50))
+        self.__btn_toggle.setIconSize(QSize(40, 40))
         self.__btn_toggle.setFixedSize(50, 50)
-        self.__btn_toggle.setStyleSheet(
-            "QPushButton{border-radius:25px;border:2px solid #3b3b5e;background:#1a1a2e;} "
-            "QPushButton:checked{background-color:#3b5e3b;}"
-        )
         self.__btn_toggle.clicked.connect(self.__toggle_musica)
 
-    def __setup_controles_grabacion(self, ctr):
+    def __setup_controles_grabacion(self):
         d = os.path.dirname(__file__)
         self.__btn_grabar = QPushButton()
         self.__btn_grabar.setCheckable(True)
         self.__btn_grabar.setIcon(QIcon(os.path.join(d, "../img/record.png")))
-        self.__btn_grabar.setIconSize(QSize(50, 50))
+        self.__btn_grabar.setIconSize(QSize(40, 40))
         self.__btn_grabar.setFixedSize(50, 50)
-        self.__btn_grabar.setStyleSheet(
-            "QPushButton{border-radius:25px;border:2px solid #3b3b5e;background:#1a1a2e;} "
-            "QPushButton:checked{background-color:red;}"
-        )
         self.__btn_grabar.clicked.connect(self.__toggle_grabacion)
 
-
-    def __hilo_musical_en_tiempo_real(self):
-        while True:
-            if self.__mute or not self.__musica_activa:
-                time.sleep(1)
-                continue
-            tonalidad = self.obtener_tonalidad_actual()
-            tipo_escala = self.__escala_actual
-            try:
-                variacion = np.std(np.array(self.__voltajes[-100:])) if len(self.__voltajes) >= 100 else 0
-                sintesisMusical.tocar_un_acorde(tonalidad=tonalidad, tipo_escala=tipo_escala, variacion=variacion)
-            except: pass
-            time.sleep(0.5)
-
     def cargar_perfil_planta(self):
+        """Cache optimizado para perfil de planta"""
         perfil = {
             "temperatura_min": 20, "temperatura_max": 30, "ponderacion_temperatura": 25,
             "humedad_relativa_min": 50, "humedad_relativa_max": 60, "ponderacion_humedad_relativa": 15,
             "humedad_suelo_min": 40, "humedad_suelo_max": 70, "ponderacion_humedad_suelo": 40,
             "iluminacion_min": 25000, "iluminacion_max": 50000, "ponderacion_iluminacion": 20
         }
+        
         try:
             if os.path.exists("Perfil.txt"):
                 with open("Perfil.txt", "r", encoding="utf-8") as f:
                     for linea in f:
                         linea = linea.strip()
-                        if not linea or linea.startswith("#"): continue
+                        if not linea or linea.startswith("#"): 
+                            continue
                         if "=" in linea:
                             clave, valor = linea.split("=", 1)
                             clave = clave.strip()
                             valor = valor.strip()
-                            if clave in perfil and valor.replace('.', '', 1).isdigit():
+                            if clave in perfil and valor.replace('.', '', 1).replace('-', '', 1).isdigit():
                                 perfil[clave] = float(valor)
-        except: pass
+        except Exception as e:
+            print(f"Error cargando perfil: {e}")
+        
         return perfil
 
     def calcular_bienestar(self, temp, hum, light, soil):
-        if temp == "--" or hum == "--" or light == "--" or soil == "--":
+        """Optimizado para evitar cálculos innecesarios"""
+        if any(val == "--" for val in [temp, hum, light, soil]):
             return 0, "😐 Estado: --"
-        try: t, h, l, s = float(temp), float(hum), float(light), float(soil)
-        except: return 0, "😐 Error en datos"
+        
+        try: 
+            t, h, l, s = float(temp), float(hum), float(light), float(soil)
+        except: 
+            return 0, "😐 Error en datos"
+        
         p = self.perfil_planta
+        
         def calcular_contribucion(valor, min_val, max_val, ponderacion):
-            if min_val <= valor <= max_val: return ponderacion
-            if valor < min_val: return ponderacion * (1 - min(1, (min_val - valor) / min_val))
-            return ponderacion * (1 - min(1, (valor - max_val) / max_val))
-        c_temp = calcular_contribucion(t, p["temperatura_min"], p["temperatura_max"], p["ponderacion_temperatura"])
-        c_hum = calcular_contribucion(h, p["humedad_relativa_min"], p["humedad_relativa_max"], p["ponderacion_humedad_relativa"])
-        c_light = calcular_contribucion(l, p["iluminacion_min"], p["iluminacion_max"], p["ponderacion_iluminacion"])
-        c_soil = calcular_contribucion(s, p["humedad_suelo_min"], p["humedad_suelo_max"], p["ponderacion_humedad_suelo"])
-        total = c_temp + c_hum + c_light + c_soil
+            if min_val <= valor <= max_val: 
+                return ponderacion
+            if valor < min_val: 
+                return ponderacion * max(0, 1 - (min_val - valor) / min_val)
+            return ponderacion * max(0, 1 - (valor - max_val) / max_val)
+        
+        # Cálculos optimizados
+        contribuciones = [
+            calcular_contribucion(t, p["temperatura_min"], p["temperatura_max"], p["ponderacion_temperatura"]),
+            calcular_contribucion(h, p["humedad_relativa_min"], p["humedad_relativa_max"], p["ponderacion_humedad_relativa"]),
+            calcular_contribucion(l, p["iluminacion_min"], p["iluminacion_max"], p["ponderacion_iluminacion"]),
+            calcular_contribucion(s, p["humedad_suelo_min"], p["humedad_suelo_max"], p["ponderacion_humedad_suelo"])
+        ]
+        
+        total = sum(contribuciones)
         estado_emo, nueva_escala = ("😊 Feliz", "mayor") if total >= 80 else ("😢 Triste", "menor")
-        if self.__escala_actual is None:
+        
+        # Optimización: Solo cambiar escala si es diferente
+        if self.__escala_actual != nueva_escala:
             self.__escala_actual = nueva_escala
-            if not self.__bienestar_inicializado: 
-                self.__bienestar_inicializado = True
-                self.__iniciar_musica()
-        elif nueva_escala != self.__escala_actual: 
-            self.__escala_actual = nueva_escala
-        return total, f"{estado_emo} ({total:.0f}%)"
-
-    def __actualizar_grafica(self):
-        nuevos_voltajes = []
-        while True:
-            tiempo, voltaje = self.__signal.siguiente_valor()
-            if tiempo is None: break
-            self.__tiempos.append(tiempo)
-            nuevos_voltajes.append(voltaje)
-        if not nuevos_voltajes: return
-        self.__voltajes.extend(nuevos_voltajes)
-        ventana = 5
-        corte = self.__tiempos[-1] - ventana
-        while self.__tiempos and self.__tiempos[0] < corte:
-            self.__tiempos.pop(0)
-            self.__voltajes.pop(0)
-        voltajes_filtrados = self.__signal.aplicar_filtros(np.array(self.__voltajes))
-        self.__linea.set_data(self.__tiempos, voltajes_filtrados)
-        ahora = time.time()
-        if voltajes_filtrados.size and not self.__mute and ahora - self.__ultimo_tiempo_musica >= 5:
-            variacion = np.std(voltajes_filtrados)
-            now = time.time()
-            if now - self.__soil_fake_last_update >= 60:
-                self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
-                self.__soil_fake_last_update = now
-            temp, hum, light, _soil = self.__signal.obtener_datos_sensores()
-            soil = self.__soil_fake_value
-            try: self.actualizar_perfil_y_bienestar(temp, hum, light, soil)
-            except: pass
-            self.__ultimo_tiempo_musica = ahora
-            ton_actual = self.obtener_tonalidad_actual()
-            if ton_actual != self.__ultima_tonalidad_usada:
-                self.__ultima_tonalidad_usada = ton_actual
-        if voltajes_filtrados.size:
-            media = np.mean(voltajes_filtrados)
-            self.__ax.set_ylim(media - 10, media + 10)
-        self.__ax.set_xlim(max(0, corte), self.__tiempos[-1])
-        self.__canvas.draw_idle()
-
-    def actualizar_perfil_y_bienestar(self, temp, hum, light, soil):
-        self.perfil_planta = self.cargar_perfil_planta()
-        total, estado = self.calcular_bienestar(temp, hum, light, soil)
-        self.__estado_label.setText(estado)
+            
         if not self.__bienestar_inicializado:
             self.__bienestar_inicializado = True
             self.__iniciar_musica()
+        
+        return total, f"{estado_emo} ({total:.0f}%)"
+
+    def __actualizar_grafica(self):
+        """Optimizado para mejor rendimiento"""
+        # Contador para reducir frecuencia de actualización visual
+        self.__update_counter += 1
+        
+        # Procesar nuevos datos
+        nuevos_datos = []
+        while True:
+            tiempo, voltaje = self.__signal.siguiente_valor()
+            if tiempo is None: 
+                break
+            nuevos_datos.append((tiempo, voltaje))
+        
+        if not nuevos_datos:
+            return
+        
+        # Agregar datos a buffers
+        for tiempo, voltaje in nuevos_datos:
+            self.__tiempos_buffer.append(tiempo)
+            self.__voltajes_buffer.append(voltaje)
+        
+        # Solo actualizar visual cada N iteraciones
+        if self.__update_counter % 3 != 0:
+            return
+        
+        if not self.__tiempos_buffer:
+            return
+        
+        # Convertir a arrays solo cuando sea necesario
+        tiempos_array = np.array(list(self.__tiempos_buffer))
+        voltajes_array = np.array(list(self.__voltajes_buffer))
+        
+        # Aplicar filtros (optimizado)
+        if len(voltajes_array) > 0:
+            voltajes_filtrados = self.__signal.aplicar_filtros(voltajes_array)
+        else:
+            return
+        
+        # Actualizar gráfica (optimizado)
+        self.__linea.set_data(tiempos_array, voltajes_filtrados)
+        
+        # Lógica de música optimizada
+        ahora = time.time()
+        if (voltajes_filtrados.size > 0 and not self.__mute and 
+            ahora - self.__ultimo_tiempo_musica >= 10):  # Aumentar intervalo
+            
+            self.__ultimo_tiempo_musica = ahora
+            
+            # Actualizar datos fake de suelo
+            if ahora - self.__soil_fake_last_update >= 60:
+                self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
+                self.__soil_fake_last_update = ahora
+            
+            # Procesar bienestar en background
+            try:
+                temp, hum, light, _ = self.__signal.obtener_datos_sensores()
+                self.actualizar_perfil_y_bienestar(temp, hum, light, self.__soil_fake_value)
+            except Exception as e:
+                print(f"Error actualizando bienestar: {e}")
+        
+        # Ajustar límites de manera eficiente
+        if len(voltajes_filtrados) > 0:
+            media = np.mean(voltajes_filtrados[-100:])  # Solo últimos 100 valores
+            self.__ax.set_ylim(media - 10, media + 10)
+        
+        if len(tiempos_array) > 0:
+            tiempo_actual = tiempos_array[-1]
+            self.__ax.set_xlim(max(0, tiempo_actual - 5), tiempo_actual)
+        
+        # Optimización: Solo redibujar si es necesario
+        try:
+            self.__canvas.draw_idle()
+        except Exception as e:
+            print(f"Error dibujando canvas: {e}")
+
+    def actualizar_perfil_y_bienestar(self, temp, hum, light, soil):
+        """Optimizado con cache"""
+        # Solo recargar perfil si ha pasado tiempo suficiente
+        current_time = time.time()
+        if current_time - getattr(self, '_last_profile_update', 0) > 30:
+            self.perfil_planta = self.cargar_perfil_planta()
+            self._last_profile_update = current_time
+        
+        total, estado = self.calcular_bienestar(temp, hum, light, soil)
+        self.__estado_label.setText(estado)
+        
+        if not self.__bienestar_inicializado:
+            self.__bienestar_inicializado = True
+            self.__iniciar_musica()
+        
         return total
 
     def __iniciar_musica(self):
-        if not pygame.mixer.get_init(): pygame.mixer.init()
-        sintesisMusical.iniciar_lluvia()
-        self.__mute = False
-        self.__btn_toggle.setChecked(True)
-        self.__btn_toggle.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "../img/stopMusic.png")))
-        if self.__hilo_musica is None or not self.__hilo_musica.is_alive():
-            self.__hilo_musica = threading.Thread(target=self.__hilo_musical_en_tiempo_real, daemon=True)
-            self.__hilo_musica.start()
+        """Optimizado con thread separado"""
+        try:
+            if not pygame.mixer.get_init(): 
+                pygame.mixer.init(buffer=512)  # Buffer más pequeño
+            
+            sintesisMusical.iniciar_lluvia()
+            self.__mute = False
+            self.__btn_toggle.setChecked(True)
+            
+            d = os.path.dirname(__file__)
+            self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/stopMusic.png")))
+            
+            # Iniciar thread de música
+            if self.__music_thread is None or not self.__music_thread.isRunning():
+                self.__music_thread = MusicThread(self)
+                self.__music_thread.start()
+                
+        except Exception as e:
+            print(f"Error iniciando música: {e}")
 
     def obtener_tonalidad_actual(self):
         return self.__leer_tonalidad_config()
 
     def __actualizar_bienestar(self):
-        temp, hum, light, _soil = self.__signal.obtener_datos_sensores()
-        now = time.time()
-        if now - self.__soil_fake_last_update >= 60:
-            self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
-            self.__soil_fake_last_update = now
-        soil = self.__soil_fake_value
-        try: self.actualizar_perfil_y_bienestar(temp, hum, light, soil)
-        except: pass
+        """Optimizado para ejecutar menos frecuentemente"""
+        try:
+            temp, hum, light, _ = self.__signal.obtener_datos_sensores()
+            
+            # Actualizar dato fake de suelo
+            now = time.time()
+            if now - self.__soil_fake_last_update >= 60:
+                self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
+                self.__soil_fake_last_update = now
+            
+            self.actualizar_perfil_y_bienestar(temp, hum, light, self.__soil_fake_value)
+        except Exception as e:
+            print(f"Error en actualizar_bienestar: {e}")
 
     def cargar_frecuencias_sensores(self):
+        """Con cache para evitar I/O innecesario"""
         try:
+            current_time = time.time()
+            if current_time - self.__config_last_read < 30:  # Cache por 30 segundos
+                return
+            
+            self.__config_last_read = current_time
+            
             if os.path.exists("configuracion.txt"):
                 with open("configuracion.txt", "r", encoding="utf-8") as f:
                     for linea in f:
@@ -324,72 +520,132 @@ class MainModule(Module):
                             if clave.startswith("frecuencia"):
                                 sensor = clave[10:]
                                 if sensor in self.frecuencias_sensores:
-                                    try: self.frecuencias_sensores[sensor] = max(3, int(valor.strip()))
-                                    except: pass
-        except: pass
+                                    try: 
+                                        self.frecuencias_sensores[sensor] = max(3, int(valor.strip()))
+                                    except: 
+                                        pass
+        except Exception as e:
+            print(f"Error cargando frecuencias: {e}")
 
     def guardar_dato_sensor(self, sensor, valor):
-        if valor == "--": return
+        """Optimizado para evitar I/O excesivo"""
+        if valor == "--": 
+            return
+        
         tiempo_actual = time.time()
         if tiempo_actual - self.ultimo_guardado[sensor] >= self.frecuencias_sensores[sensor]:
             try:
-                with open(os.path.join(self.directorio_historial, f"{sensor}.txt"), "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{valor}\n")
+                filepath = os.path.join(self.directorio_historial, f"{sensor}.txt")
+                with open(filepath, "a", encoding="utf-8") as f:
+                    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    f.write(f"{timestamp},{valor}\n")
                 self.ultimo_guardado[sensor] = tiempo_actual
-            except: pass
+            except Exception as e:
+                print(f"Error guardando sensor {sensor}: {e}")
 
     def __leer_tonalidad_config(self):
+        """Con cache optimizado"""
         try:
+            current_time = time.time()
+            if ('tonalidad' in self.__config_cache and 
+                current_time - self.__config_cache.get('tonalidad_time', 0) < 10):
+                return self.__config_cache['tonalidad']
+            
             if os.path.exists("configuracion.txt"):
                 with open("configuracion.txt", "r", encoding="utf-8") as f:
                     for linea in f:
                         if linea.lower().startswith("tonalidad="):
-                            return linea.split("=", 1)[1].strip()
-        except: pass
+                            tonalidad = linea.split("=", 1)[1].strip()
+                            self.__config_cache['tonalidad'] = tonalidad
+                            self.__config_cache['tonalidad_time'] = current_time
+                            return tonalidad
+        except Exception as e:
+            print(f"Error leyendo tonalidad: {e}")
+        
         return "C"
 
     def __leer_dispositivo_config(self):
+        """Con cache optimizado"""
         try:
+            current_time = time.time()
+            if ('dispositivo' in self.__config_cache and 
+                current_time - self.__config_cache.get('dispositivo_time', 0) < 30):
+                return self.__config_cache['dispositivo']
+            
             if os.path.exists("configuracion.txt"):
                 with open("configuracion.txt", "r", encoding="utf-8") as f:
                     for linea in f:
                         if linea.lower().startswith("dispositivo="):
-                            return int(linea.split("=", 1)[1].strip())
-        except: pass
+                            dispositivo = int(linea.split("=", 1)[1].strip())
+                            self.__config_cache['dispositivo'] = dispositivo
+                            self.__config_cache['dispositivo_time'] = current_time
+                            return dispositivo
+        except Exception as e:
+            print(f"Error leyendo dispositivo: {e}")
+        
         return None
 
     def __toggle_musica(self):
-        if self.__btn_toggle.isChecked():
-            self.__mute = False
-            self.__btn_toggle.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "../img/stopMusic.png")))
-            sintesisMusical.iniciar_lluvia()
-        else:
-            sintesisMusical.detener_musica()
-            self.__mute = True
-            pygame.mixer.music.stop()
-            self.__btn_toggle.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "../img/startMusic.ico")))
+        """Optimizado"""
+        try:
+            if self.__btn_toggle.isChecked():
+                self.__mute = False
+                d = os.path.dirname(__file__)
+                self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/stopMusic.png")))
+                sintesisMusical.iniciar_lluvia()
+                
+                # Reiniciar thread si es necesario
+                if self.__music_thread is None or not self.__music_thread.isRunning():
+                    self.__music_thread = MusicThread(self)
+                    self.__music_thread.start()
+            else:
+                sintesisMusical.detener_musica()
+                self.__mute = True
+                
+                if self.__music_thread and self.__music_thread.isRunning():
+                    self.__music_thread.detener()
+                    
+                pygame.mixer.music.stop()
+                d = os.path.dirname(__file__)
+                self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/startMusic.ico")))
+        except Exception as e:
+            print(f"Error toggle música: {e}")
 
     def __actualizar_configuracion_txt(self, nueva_nota):
+        """Optimizado para I/O"""
         try:
+            # Actualizar cache inmediatamente
+            self.__config_cache['tonalidad'] = nueva_nota
+            self.__config_cache['tonalidad_time'] = time.time()
+            
+            # Actualizar archivo en background
             if os.path.exists("configuracion.txt"):
                 nuevas_lineas = []
                 tonalidad_actualizada = False
+                
                 with open("configuracion.txt", "r", encoding="utf-8") as f:
                     for linea in f:
                         if linea.strip().lower().startswith("tonalidad="):
                             nuevas_lineas.append(f"tonalidad={nueva_nota}\n")
                             tonalidad_actualizada = True
-                        else: nuevas_lineas.append(linea)
-                if not tonalidad_actualizada: nuevas_lineas.append(f"tonalidad={nueva_nota}\n")
+                        else: 
+                            nuevas_lineas.append(linea)
+                
+                if not tonalidad_actualizada: 
+                    nuevas_lineas.append(f"tonalidad={nueva_nota}\n")
+                
                 with open("configuracion.txt", "w", encoding="utf-8") as f:
                     f.writelines(nuevas_lineas)
-        except: pass
+        except Exception as e:
+            print(f"Error actualizando configuración: {e}")
 
     def __toggle_grabacion(self):
+        """Optimizado con threads"""
         if self.__btn_grabar.isChecked():
-            # EMPEZAR A GRABAR
+            # Iniciar grabación
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             ruta_almacenamiento = "grabaciones"
+            
             try:
                 if os.path.exists("configuracion.txt"):
                     with open("configuracion.txt", "r", encoding="utf-8") as f:
@@ -397,100 +653,124 @@ class MainModule(Module):
                             if linea.lower().startswith("rutaalmacenamiento="):
                                 ruta_almacenamiento = linea.split("=", 1)[1].strip()
                                 break
-            except: pass
+            except: 
+                pass
 
             os.makedirs(ruta_almacenamiento, exist_ok=True)
-            self.__filename = os.path.join(ruta_almacenamiento, f"grabacion_{timestamp}.wav")
-            print(f"[🎙️] Grabando en: {self.__filename}")
-
+            filename = os.path.join(ruta_almacenamiento, f"grabacion_{timestamp}.wav")
+            
+            print(f"[🎙️] Iniciando grabación: {filename}")
+            
+            # Configurar UI
             self.__grabando = True
             self.__grab_start_time = datetime.datetime.now()
             self.__grab_label.setText("⏺️ 00:00")
             self.__grab_label.show()
             self.__grab_timer.start(1000)
-
+            
+            # Iniciar thread de grabación
             dispositivo_id = self.__leer_dispositivo_config()
-
-            self.__cola_audio = queue.Queue()
-            self.__evento_detener = threading.Event()
-
-            def callback(indata, frames, time_info, status):
-                if status:
-                    print(f"[⚠️] Grabación: {status}")
-                if self.__grabando:
-                    self.__cola_audio.put(indata.copy())
-
-            self.__grabacion_thread = threading.Thread(
-                target=self.__grabar_audio_con_callback,
-                args=(self.__filename, dispositivo_id, callback),
-                daemon=True
-            )
-            self.__grabacion_thread.start()
-
+            self.__audio_recorder = AudioRecorderThread(filename, dispositivo_id)
+            self.__audio_recorder.grabacion_terminada.connect(self.__on_grabacion_terminada)
+            self.__audio_recorder.error_grabacion.connect(self.__on_error_grabacion)
+            self.__audio_recorder.start()
+            
         else:
-            # PARAR GRABACIÓN
-            print("[🛑] Parando grabación...")
+            # Detener grabación
+            print("[🛑] Deteniendo grabación...")
             self.__grabando = False
             self.__grab_timer.stop()
             self.__grab_label.hide()
-            self.__evento_detener.set()
+            
+            if self.__audio_recorder and self.__audio_recorder.isRunning():
+                self.__audio_recorder.detener_grabacion()
+                self.__audio_recorder.wait(3000)  # Esperar máximo 3 segundos
 
-            if self.__grabacion_thread and self.__grabacion_thread.is_alive():
-                self.__grabacion_thread.join()
-
-            self.__guardar_audio(self.__filename)
-    def __guardar_audio(self, filename):
-        if self.__cola_audio.empty():
-            print("[⚠️] No se grabó ningún audio.")
-            return
-
-        frames = []
-        while not self.__cola_audio.empty():
-            frames.append(self.__cola_audio.get())
-
-        audio_final = np.concatenate(frames, axis=0)
-        samplerate = 44100
-
-        sf.write(filename, audio_final, samplerate)
+    def __on_grabacion_terminada(self, filename):
+        """Callback cuando termina la grabación"""
         print(f"[✅] Grabación guardada: {filename}")
-        
 
-
-    def __grabar_audio_con_callback(self, filename, dispositivo_id, callback):
-        samplerate = 44100
-        try:
-            with sd.InputStream(
-                device=dispositivo_id,
-                samplerate=samplerate,
-                channels=2,
-                dtype='float32',
-                callback=callback
-            ):
-                print("[INFO] Stream iniciado")
-                while self.__grabando:
-                    sd.sleep(100)
-                print("[🛑] Stream detenido")
-        except Exception as e:
-            print(f"[❌] Error en grabación: {str(e)}")
+    def __on_error_grabacion(self, error):
+        """Callback cuando hay error en grabación"""
+        print(f"[❌] Error en grabación: {error}")
+        self.__grabando = False
+        self.__grab_timer.stop()
+        self.__grab_label.hide()
+        self.__btn_grabar.setChecked(False)
 
     def __actualizar_tiempo_grabacion(self):
-        elapsed = datetime.datetime.now() - self.__grab_start_time
-        minutes, seconds = divmod(elapsed.seconds, 60)
-        self.__grab_label.setText(f"⏺️ {minutes:02d}:{seconds:02d}")
+        """Optimizado para mostrar tiempo"""
+        if not self.__grabando:
+            return
+            
+        try:
+            elapsed = datetime.datetime.now() - self.__grab_start_time
+            minutes, seconds = divmod(elapsed.seconds, 60)
+            self.__grab_label.setText(f"⏺️ {minutes:02d}:{seconds:02d}")
+        except Exception as e:
+            print(f"Error actualizando tiempo grabación: {e}")
 
     def __actualizar_labels_sensores(self):
-        temp, hum, light, _soil = self.__signal.obtener_datos_sensores()
-        now = time.time()
-        if now - self.__soil_fake_last_update >= 60:
-            self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
-            self.__soil_fake_last_update = now
-        soil = self.__soil_fake_value
-        self.__climate_label.setText(f"🌡️ Temp: {temp} °C")
-        self.__humid_label.setText(f"💦 H.rel: {hum}")
-        self.__light_label.setText(f"🔆 Luz: {light} lux")
-        self.__soil_label.setText(f"🌱 Hum.suelo: {soil} %")
+        """Optimizado para reducir overhead"""
         try:
-            for sensor, valor in zip(["temperatura", "humedad_relativa", "iluminacion", "humedad_suelo"], [temp, hum, light, soil]):
+            temp, hum, light, _ = self.__signal.obtener_datos_sensores()
+            
+            # Actualizar dato fake de suelo
+            now = time.time()
+            if now - self.__soil_fake_last_update >= 60:
+                self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
+                self.__soil_fake_last_update = now
+            
+            soil = self.__soil_fake_value
+            
+            # Actualizar labels (optimizado)
+            self.__climate_label.setText(f"🌡️ Temp: {temp} °C")
+            self.__humid_label.setText(f"💦 H.rel: {hum}")
+            self.__light_label.setText(f"🔆 Luz: {light} lux")
+            self.__soil_label.setText(f"🌱 Hum.suelo: {soil} %")
+            
+            # Guardar datos y actualizar bienestar
+            sensores_data = [
+                ("temperatura", temp),
+                ("humedad_relativa", hum),
+                ("iluminacion", light),
+                ("humedad_suelo", soil)
+            ]
+            
+            for sensor, valor in sensores_data:
                 self.guardar_dato_sensor(sensor, valor)
+            
             self.actualizar_perfil_y_bienestar(temp, hum, light, soil)
-        except: pass
+            
+        except Exception as e:
+            print(f"Error actualizando sensores: {e}")
+
+    def closeEvent(self, event):
+        """Cleanup al cerrar la aplicación"""
+        try:
+            # Detener threads
+            if self.__music_thread and self.__music_thread.isRunning():
+                self.__music_thread.detener()
+                self.__music_thread.wait(2000)
+            
+            if self.__audio_recorder and self.__audio_recorder.isRunning():
+                self.__audio_recorder.detener_grabacion()
+                self.__audio_recorder.wait(2000)
+            
+            # Detener timers
+            self.__timer.stop()
+            self.__sensor_timer.stop()
+            self.__bienestar_timer.stop()
+            self.__grab_timer.stop()
+            
+            # Limpiar pygame
+            try:
+                pygame.mixer.quit()
+            except:
+                pass
+            
+            super().closeEvent(event)
+            
+        except Exception as e:
+            print(f"Error al cerrar: {e}")
+            event.accept()

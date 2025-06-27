@@ -1,5 +1,5 @@
-tonalidad=C
-dispositivo=16
+tonalidad=F#
+dispositivo=13
 frecuenciatemperatura=60
 frecuenciahumedad_relativa=60
 frecuenciailuminacion=60

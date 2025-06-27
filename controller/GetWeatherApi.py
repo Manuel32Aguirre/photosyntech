@@ -9,7 +9,7 @@ from model.WeatherInfo import WeatherInfo
 class GetWeatherApi(GetWeather):
 
     __API_KEY_WEATHER = '1d174da619c9478ba7922729250906'
-    __ENDPOINT_IP = 'https://ipinfo.io/json'
+    __ENDPOINT_IP = 'https://ipinfo.io/json?token=42a24923dfb826'
     __ENDPOINT_WEATHER = 'http://api.weatherapi.com/v1/current.json'
 
     def get_weather(self) -> WeatherInfo:
