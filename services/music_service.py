@@ -101,7 +101,7 @@ class MusicService:
             pygame.mixer.music.load(Settings.RAIN_AUDIO)
             pygame.mixer.music.set_volume(Settings.MUSIC_VOLUME)
             pygame.mixer.music.play(-1)
-            print("🌧️ Lluvia iniciada")
+            print("Lluvia iniciada")
         except Exception as e:
             print(f"Error iniciando lluvia: {e}")
     

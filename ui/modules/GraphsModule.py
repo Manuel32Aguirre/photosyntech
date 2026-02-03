@@ -178,7 +178,6 @@ class GraphsModule(Module):
     def update_graphs(self, temp=0.0, hum=0.0, light=0.0, soil=0.0, timestamp=None):
         now = timestamp or datetime.datetime.now()
 
-        # OVERRIDE: Usar la humedad fake del MainModule
         soil = float(self.main_module._MainModule__soil_fake_value)
 
         data_map = {

@@ -233,7 +233,7 @@ class ConfigModule(Module):
                 for clave, valor in config.items():
                     f.write(f"{clave}={valor}\n")
 
-            print("✅ Configuraciones guardadas")
+            print("Configuraciones guardadas")
 
         except Exception as e:
             print(f"Error al guardar configuraciones: {e}")

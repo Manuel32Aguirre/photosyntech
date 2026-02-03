@@ -26,9 +26,9 @@ class GrabadorAudio:
                 dev_info = sd.query_devices(self.device_id)
                 if dev_info['max_input_channels'] > 0:
                     dispositivo_valido = True
-                    print(f"[✔] Usando dispositivo: {self.device_id} - {dev_info['name']}")
+                    print(f"Usando dispositivo: {self.device_id} - {dev_info['name']}")
             except Exception as e:
-                print(f"[⚠️] Dispositivo guardado inválido: {e}")
+                print(f"Dispositivo guardado inválido: {e}")
 
         if not dispositivo_valido:
             print("[INFO] Buscando dispositivo válido...")
@@ -37,7 +37,7 @@ class GrabadorAudio:
                     if dev['max_input_channels'] > 0:
                         self.device_id = i
                         dispositivo_valido = True
-                        print(f"[✔] Fallback: usando dispositivo {i}: {dev['name']}")
+                        print(f"Fallback: usando dispositivo {i}: {dev['name']}")
                         break
                 except:
                     continue
@@ -48,7 +48,7 @@ class GrabadorAudio:
 
         def callback(indata, frames, time_info, status):
             if status:
-                print(f"[⚠️] Grabación: {status}")
+                print(f"Grabación: {status}")
             if not self._evento_detener.is_set():
                 self._cola_audio.put(indata.copy())
 
@@ -61,7 +61,7 @@ class GrabadorAudio:
                 callback=callback
             )
 
-            print(f"[🎙️] Abriendo WAV: {self.filename}")
+            print(f"Abriendo WAV: {self.filename}")
 
             # Iniciar la escritura
             self._hilo_escritura = threading.Thread(target=self._escribir_audio, daemon=True)
@@ -70,13 +70,13 @@ class GrabadorAudio:
             # 👉 Arrancar el stream aquí (NO en otro hilo)
             self._audio_stream.start()
             print("[INFO] Stream iniciado")
-            print(f"[🎙️] Grabando en: {self.filename}")
+            print(f"Grabando en: {self.filename}")
 
         except Exception as e:
             print(f"[❌] Error iniciando grabación: {str(e)}")
 
     def detener_grabacion(self):
-        print(f"[🛑] Deteniendo grabación...")
+        print(f"Deteniendo grabación...")
         self._evento_detener.set()
 
         try:
@@ -91,10 +91,10 @@ class GrabadorAudio:
         if self._hilo_escritura and self._hilo_escritura.is_alive():
             self._hilo_escritura.join(timeout=3.0)
 
-        print(f"[✅] Grabación finalizada: {self.filename}")
-        print(f"[ℹ️] Total frames grabados: {self._frames_total}")
+        print(f"Grabación finalizada: {self.filename}")
+        print(f"Total frames grabados: {self._frames_total}")
         duracion_seg = self._frames_total / 44100
-        print(f"[ℹ️] Duración estimada: {duracion_seg:.2f} segundos")
+        print(f"Duración estimada: {duracion_seg:.2f} segundos")
 
     def _escribir_audio(self):
         samplerate = 44100
@@ -112,6 +112,6 @@ class GrabadorAudio:
                         self._frames_total += len(data_int16)
                     except queue.Empty:
                         continue
-            print(f"[✅] WAV guardado correctamente: {self.filename}")
+            print(f"WAV guardado correctamente: {self.filename}")
         except Exception as e:
             print(f"[❌] Error escribiendo WAV: {e}")

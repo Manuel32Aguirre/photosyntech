@@ -4,19 +4,13 @@ import random
 import time
 import os
 
-player = None  # <--- inicializado en None
+player = None
 
 
-# Inicializa solo el MIDI (esto sí es necesario)
 pygame.midi.init()
 
 player = pygame.midi.Output(0)
 player.set_instrument(92, channel=0)
-
-# ⛔️ OJO: NO arrancamos la lluvia aquí
-# pygame.mixer.init()
-# pygame.mixer.music.load("audio/rain.mp3")
-# pygame.mixer.music.play(-1)
 
 escalas = {
     "C":  ([60, 62, 64, 65, 67, 69, 71, 72], [60, 62, 63, 65, 67, 68, 70, 72]),
@@ -60,9 +54,8 @@ musica_activa = False
 RANGO_MIN = 48
 RANGO_MAX = 60
 
-# NUEVO: función para iniciar la lluvia SOLO cuando se le pida
 def iniciar_lluvia():
-    print("🌧️ Iniciando lluvia...")
+    print("Iniciando lluvia...")
     pygame.mixer.music.load("audio/rain.mp3")
     pygame.mixer.music.set_volume(0.2)
     pygame.mixer.music.play(-1)
@@ -96,7 +89,7 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
     if tonalidad is None:
         tonalidad = leer_tonalidad_config()
 
-    print(f"🎼 Iniciando progresión en {tonalidad} {tipo_escala}")
+    print(f"Iniciando progresión en {tonalidad} {tipo_escala}")
 
     # Persistencia de progresiones no repetidas
     if not hasattr(tocar_progresion, "progresiones_restantes"):
@@ -119,13 +112,13 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
         for grado in progresion:
             if not musica_activa:
                 apagar_notas()
-                print("🛑 Música interrumpida")
+                print("Música interrumpida")
                 return
 
             if evento_stop and evento_stop.is_set():
                 evento_stop.clear()
                 apagar_notas()
-                print("🔄 Cambio de tonalidad detectado, reiniciando progresión")
+                print("Cambio de tonalidad detectado, reiniciando progresión")
                 return
 
             base_nota = escala[grado]
@@ -148,7 +141,7 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
                 if evento_stop and evento_stop.is_set():
                     evento_stop.clear()
                     apagar_acorde(acorde)
-                    print("🔄 Cambio de tonalidad detectado durante acorde")
+                    print("Cambio de tonalidad detectado durante acorde")
                     return
                 time.sleep(0.1)
                 tiempo += 0.1
@@ -160,7 +153,7 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
             while pausa_tiempo < pausa:
                 if evento_stop and evento_stop.is_set():
                     evento_stop.clear()
-                    print("🔄 Cambio de tonalidad detectado durante pausa")
+                    print("Cambio de tonalidad detectado durante pausa")
                     return
                 time.sleep(0.1)
                 pausa_tiempo += 0.1
@@ -177,7 +170,7 @@ def tocar_progresion(tonalidad=None, tipo_escala="mayor", velocidad="medio", eve
 def detener_musica():
     global musica_activa
     if musica_activa:
-        print("🛑 Deteniendo música.")
+        print("Deteniendo música.")
         musica_activa = False
         apagar_notas()
 
@@ -243,12 +236,12 @@ def elegir_tipo_escala():
 
 def main(tipo=None):
     tipo_escala = tipo if tipo in ["mayor", "menor"] else elegir_tipo_escala()
-    print(f"🎼 Escala elegida: {tipo_escala}")
+    print(f"Escala elegida: {tipo_escala}")
 
     try:
         tocar_progresion(tipo_escala)
     except KeyboardInterrupt:
-        print("🛑 Ejecución detenida.")
+        print("Ejecución detenida.")
         apagar_notas()
         pygame.midi.quit()
         pygame.mixer.music.stop()

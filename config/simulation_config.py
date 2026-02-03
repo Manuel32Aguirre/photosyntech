@@ -11,19 +11,16 @@ from config.settings import Settings
 
 
 class SimulationConfig:
-    """Gestor de configuración de simulación"""
     
     def __init__(self):
         self.configFile = Settings.SIMULATION_FILE
         self.usarDatosReales = Settings.USE_REAL_DATA
         self.config = self._loadConfig()
         
-        # Estado de simulación
         self.lastSensorUpdate = 0
         self.bioSignalPhase = 0
     
     def _loadConfig(self) -> Dict:
-        """Carga la configuración de simulación"""
         defaultConfig = {
             'usarDatosReales': 'true',
             'temperaturaMin': 18.0,
@@ -59,7 +56,6 @@ class SimulationConfig:
                         
                         if key == 'usarDatosReales':
                             config[key] = value.lower()
-                            # Actualizar flag global
                             self.usarDatosReales = (value.lower() == 'true')
                         elif key in config:
                             try:
@@ -72,62 +68,47 @@ class SimulationConfig:
         return config
     
     def debeUsarDatosReales(self) -> bool:
-        """Verifica si debe usar datos reales o simulados"""
         return self.usarDatosReales
     
     def generarTemperatura(self) -> float:
-        """Genera temperatura simulada"""
         return random.uniform(
             self.config['temperaturaMin'],
             self.config['temperaturaMax']
         )
     
     def generarHumedadRelativa(self) -> float:
-        """Genera humedad relativa simulada"""
         return random.uniform(
             self.config['humedadRelativaMin'],
             self.config['humedadRelativaMax']
         )
     
     def generarIluminacion(self) -> float:
-        """Genera iluminación simulada"""
         return random.uniform(
             self.config['iluminacionMin'],
             self.config['iluminacionMax']
         )
     
     def generarHumedadSuelo(self) -> float:
-        """Genera humedad de suelo simulada"""
         return random.uniform(
             self.config['humedadSueloMin'],
             self.config['humedadSueloMax']
         )
     
     def generarVoltajeBioelectrico(self) -> float:
-        """
-        Genera voltaje bioeléctrico simulado con patrón más realista
-        Usa una combinación de ondas para simular señal biológica
-        """
-        # Incrementar fase para simular señal continua
         self.bioSignalPhase += 0.1
         
-        # Combinar múltiples frecuencias para señal más realista
         baseSignal = math.sin(self.bioSignalPhase)
         noise = random.uniform(-0.3, 0.3)
         
-        # Calcular voltaje
         minVoltage = self.config['voltajeBioMin']
         maxVoltage = self.config['voltajeBioMax']
         variation = self.config['voltajeBioVariacion']
         
-        # Señal centrada en 0 con variación
         voltage = (baseSignal * variation) + noise
         
-        # Limitar al rango
         return max(minVoltage, min(maxVoltage, voltage))
     
     def deberiActualizarSensores(self) -> bool:
-        """Verifica si deben actualizarse los sensores simulados"""
         currentTime = time.time()
         frequency = self.config['frecuenciaActualizacionSensores']
         
@@ -138,12 +119,6 @@ class SimulationConfig:
         return False
     
     def generarDatosSensores(self) -> tuple:
-        """
-        Genera todos los datos de sensores
-        
-        Returns:
-            Tupla (temperatura, humedad, luz, suelo) como strings
-        """
         temp = f"{self.generarTemperatura():.1f}"
         hum = f"{self.generarHumedadRelativa():.1f}"
         light = f"{self.generarIluminacion():.0f}"

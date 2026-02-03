@@ -25,7 +25,6 @@ from core.data_storage import DataStorage
 
 
 class ReportView(QWidget):
-    """Vista de generación de reportes"""
     
     def __init__(self):
         super().__init__()
@@ -54,21 +53,17 @@ class ReportView(QWidget):
         self._setupUI()
     
     def _setupUI(self):
-        """Configura la interfaz de usuario"""
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         layout.setSpacing(15)
         
-        # Título
         plantaNombre = self.profileService.getPlantName()
         title = QLabel(f'Reportes de "{plantaNombre}"')
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
         layout.addWidget(title)
         
-        # Controles de selección
         controlsLayout = QHBoxLayout()
         
-        # Selector de sensor
         sensorLayout = QVBoxLayout()
         sensorLabel = QLabel("Sensor:")
         sensorLabel.setStyleSheet("color: white;")
@@ -80,7 +75,6 @@ class ReportView(QWidget):
         sensorLayout.addWidget(self.sensorCombo)
         controlsLayout.addLayout(sensorLayout)
         
-        # Selector de período
         periodoLayout = QVBoxLayout()
         periodoLabel = QLabel("Período:")
         periodoLabel.setStyleSheet("color: white;")
@@ -92,7 +86,6 @@ class ReportView(QWidget):
         periodoLayout.addWidget(self.periodoCombo)
         controlsLayout.addLayout(periodoLayout)
         
-        # Botón generar
         self.btnGenerar = QPushButton("Generar Reporte")
         self.btnGenerar.setStyleSheet("""
             QPushButton {
@@ -112,7 +105,6 @@ class ReportView(QWidget):
         
         layout.addLayout(controlsLayout)
         
-        # Área de gráficos con scroll
         self.scrollArea = QScrollArea()
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setStyleSheet("background-color: white; border-radius: 8px;")
@@ -127,7 +119,6 @@ class ReportView(QWidget):
         self.scrollArea.setWidget(self.graficoContainer)
         layout.addWidget(self.scrollArea)
         
-        # Botón de descarga
         btnLayout = QHBoxLayout()
         btnLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -157,7 +148,7 @@ class ReportView(QWidget):
         datos = []
         
         if not archivo.exists():
-            print(f"⚠️ No hay datos históricos para {sensor}")
+            print(f"No hay datos históricos para {sensor}")
             return datos
         
         try:

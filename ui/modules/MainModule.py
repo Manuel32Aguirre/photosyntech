@@ -19,7 +19,6 @@ import queue
 from collections import deque
 
 class AudioRecorderThread(QThread):
-    """Thread separado para grabación de audio sin bloquear UI"""
     grabacion_terminada = pyqtSignal(str)
     error_grabacion = pyqtSignal(str)
     
@@ -35,7 +34,7 @@ class AudioRecorderThread(QThread):
         try:
             def callback(indata, frames, time_info, status):
                 if status:
-                    print(f"[⚠️] Grabación: {status}")
+                    print(f"Grabación: {status}")
                 if self.grabando:
                     self.frames.append(indata.copy())
             
@@ -48,9 +47,8 @@ class AudioRecorderThread(QThread):
             ):
                 self.grabando = True
                 while self.grabando:
-                    self.msleep(100)  # Usar msleep en lugar de sd.sleep
+                    self.msleep(100)
                     
-            # Guardar audio
             if self.frames:
                 audio_final = np.concatenate(self.frames, axis=0)
                 sf.write(self.filename, audio_final, self.samplerate)
@@ -65,7 +63,6 @@ class AudioRecorderThread(QThread):
         self.grabando = False
 
 class MusicThread(QThread):
-    """Thread separado para música sin bloquear UI"""
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
@@ -81,10 +78,9 @@ class MusicThread(QThread):
                 tonalidad = self.parent.obtener_tonalidad_actual()
                 tipo_escala = self.parent._MainModule__escala_actual
                 
-                # Solo calcular variación si hay suficientes datos
                 if len(self.parent._MainModule__voltajes_buffer) >= 1500:
                     voltajes_array = np.array(list(self.parent._MainModule__voltajes_buffer))
-                    variacion = np.std(voltajes_array[-50:])  # Solo últimos 50 valores
+                    variacion = np.std(voltajes_array[-50:])
                 else:
                     variacion = 0
                     
@@ -105,7 +101,6 @@ class MainModule(Module):
     def __init__(self, señal_bio):
         super().__init__()
         
-        # Inicializar cache de configuración PRIMERO
         self.__config_cache = {}
         self.__config_last_read = 0
         
@@ -116,52 +111,43 @@ class MainModule(Module):
         self.__grab_timer.timeout.connect(self.__actualizar_tiempo_grabacion)
         self.__mute = False
         
-        # Optimización: Usar deques para datos con tamaño máximo
-        self.__tiempos_buffer = deque(maxlen=5000)  # ~25 segundos a 200Hz
+        self.__tiempos_buffer = deque(maxlen=5000)
         self.__voltajes_buffer = deque(maxlen=5000)
         
-        # Matplotlib optimizations
-        plt.ioff()  # Desactivar modo interactivo
-        self.__fig, self.__ax = plt.subplots(figsize=(8, 4), dpi=80)  # Reducir DPI
+        plt.ioff()
+        self.__fig, self.__ax = plt.subplots(figsize=(8, 4), dpi=80)
         self.__fig.patch.set_facecolor('#1a1a2e')
         self.__ax.set_facecolor('#1a1a2e')
         self.__canvas = FigureCanvas(self.__fig)
         self.__canvas.setMinimumSize(400, 200)
         
-        # Optimizar línea de gráfica
         self.__linea, = self.__ax.plot([], [], color="#6BA568", linewidth=1.5, alpha=0.8)
         self.__ax.grid(True, alpha=0.3)
         
-        # Timers optimizados
         self.__sensor_timer = QTimer()
         self.__sensor_timer.timeout.connect(self.__actualizar_labels_sensores)
         
-        # Labels de sensores
         self.__climate_label = QLabel("🌡️ Temp: -- °C")
         self.__humid_label = QLabel("💦 H.rel: --")
         self.__light_label = QLabel("🔆 Luz: -- lux")
         self.__soil_label = QLabel("🌱 Hum.suelo: --")
         self.__estado_label = QLabel("😐 Estado: --")
         
-        # Cache para datos falsos de suelo
         self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
         self.__soil_fake_last_update = time.time()
 
-        # Variables de música optimizadas
         self.__ultimo_tiempo_musica = time.time()
         self.__escala_actual = None
         self.__bienestar_timer = QTimer()
         self.__bienestar_timer.timeout.connect(self.__actualizar_bienestar)
-        self.__bienestar_timer.start(10000)  # Reducir frecuencia a 10 segundos
+        self.__bienestar_timer.start(10000)
         self.__musica_activa = True
         self.__bienestar_inicializado = False
         self.__music_thread = None
         self.__ultima_tonalidad_usada = self.obtener_tonalidad_actual()
         
-        # Thread de grabación
         self.__audio_recorder = None
 
-        # Layouts y frames
         self.__main_layout = QHBoxLayout()
         self.__left_frame = QFrame()
         self.__right_frame = QFrame()
@@ -169,17 +155,14 @@ class MainModule(Module):
         self.__left_layout = QVBoxLayout(self.__left_frame)
         self.__right_layout = QVBoxLayout(self.__right_frame)
 
-        # GIF optimizado
         d = os.path.dirname(__file__)
         self.__movie = QMovie(os.path.join(d, "../img/plant.gif"))
-        self.__movie.setScaledSize(QSize(200, 200))  # Escalar GIF
+        self.__movie.setScaledSize(QSize(200, 200))
 
-        # Controles
         self.__setup_controles_musica()
         self.__setup_controles_grabacion()
         self.__setup_ui()
 
-        # Sensores
         self.frecuencias_sensores = {
             "temperatura": 30, "humedad_relativa": 30,
             "iluminacion": 30, "humedad_suelo": 30
@@ -191,7 +174,6 @@ class MainModule(Module):
         self.cargar_frecuencias_sensores()
         self.perfil_planta = self.cargar_perfil_planta()
 
-        # Estilo
         self.setStyleSheet("""
             #rightPanel{background:#0f0f1f;}
             QFrame{background:#1a1a2e;}
@@ -204,22 +186,18 @@ class MainModule(Module):
             QPushButton:checked{background-color:#3b5e3b;}
         """)
 
-        # Optimización: Contador para reducir frecuencia de actualización de gráfica
         self.__update_counter = 0
 
     def __setup_ui(self):
         self.__main_layout.setContentsMargins(0, 0, 0, 0)
         self.__main_layout.setSpacing(0)
 
-        # LEFT PANEL (gráfica) - Optimizado
         self.__left_layout.setContentsMargins(10, 10, 10, 10)
         self.__left_layout.setSpacing(10)
         
-        # Canvas optimizado
         self.__canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.__left_layout.addWidget(self.__canvas, 1)
         
-        # Configurar axes una sola vez
         self.__ax.set_title("Señal Bioeléctrica en tiempo real", color='white', fontsize=12)
         self.__ax.set_xlabel("Tiempo (s)", color='white')
         self.__ax.set_ylabel("Voltaje estimado (mV)", color='white')
@@ -229,16 +207,14 @@ class MainModule(Module):
         
         self.__main_layout.addWidget(self.__left_frame, 3)
 
-        # RIGHT PANEL optimizado
         self.__right_layout.setContentsMargins(15, 15, 15, 15)
         self.__right_layout.setSpacing(10)
         
-        # Info layout
         info = QVBoxLayout()
         labels = [self.__climate_label, self.__humid_label, self.__light_label, self.__soil_label]
         for label in labels:
             label.setFont(fonts.TITLE)
-            label.setWordWrap(False)  # Evitar word wrap innecesario
+            label.setWordWrap(False)
             info.addWidget(label)
         
         info.addWidget(self.__estado_label)
@@ -246,21 +222,18 @@ class MainModule(Module):
         self.__estado_label.setStyleSheet("font-size: 20px; color: #e0e0e0; font-weight: bold;")
         self.__right_layout.addLayout(info)
 
-        # GIF optimizado
         gif_label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
         gif_label.setMovie(self.__movie)
         gif_label.setMaximumSize(200, 200)
-        self.__movie.setSpeed(30)  # Reducir velocidad del GIF
+        self.__movie.setSpeed(30)
         self.__movie.start()
         self.__right_layout.addWidget(gif_label, 2)
 
-        # Label de grabación
         self.__grab_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.__grab_label.setStyleSheet("font-size:16px;color:red;font-weight:bold;")
         self.__grab_label.hide()
         self.__right_layout.addWidget(self.__grab_label)
 
-        # Controles
         ctr = QHBoxLayout()
         ctr.addWidget(self.__combo)
         ctr.addWidget(self.__btn_grabar)
@@ -270,11 +243,10 @@ class MainModule(Module):
         self.__main_layout.addWidget(self.__right_frame, 1)
         self.setLayout(self.__main_layout)
 
-        # Timers optimizados
         self.__timer = QTimer()
         self.__timer.timeout.connect(self.__actualizar_grafica)
-        self.__timer.start(50)  # Reducir frecuencia de 5ms a 50ms
-        self.__sensor_timer.start(5000)  # Sensores cada 5 segundos
+        self.__timer.start(50)
+        self.__sensor_timer.start(5000)
 
     def __setup_controles_musica(self):
         self.__combo = QComboBox()
@@ -306,7 +278,6 @@ class MainModule(Module):
         self.__btn_grabar.clicked.connect(self.__toggle_grabacion)
 
     def cargar_perfil_planta(self):
-        """Cache optimizado para perfil de planta"""
         perfil = {
             "temperatura_min": 20, "temperatura_max": 30, "ponderacion_temperatura": 25,
             "humedad_relativa_min": 50, "humedad_relativa_max": 60, "ponderacion_humedad_relativa": 15,
@@ -333,7 +304,6 @@ class MainModule(Module):
         return perfil
 
     def calcular_bienestar(self, temp, hum, light, soil):
-        """Optimizado para evitar cálculos innecesarios"""
         if any(val == "--" for val in [temp, hum, light, soil]):
             return 0, "😐 Estado: --"
         
@@ -351,7 +321,6 @@ class MainModule(Module):
                 return ponderacion * max(0, 1 - (min_val - valor) / min_val)
             return ponderacion * max(0, 1 - (valor - max_val) / max_val)
         
-        # Cálculos optimizados
         contribuciones = [
             calcular_contribucion(t, p["temperatura_min"], p["temperatura_max"], p["ponderacion_temperatura"]),
             calcular_contribucion(h, p["humedad_relativa_min"], p["humedad_relativa_max"], p["ponderacion_humedad_relativa"]),
@@ -362,7 +331,6 @@ class MainModule(Module):
         total = sum(contribuciones)
         estado_emo, nueva_escala = ("😊 Feliz", "mayor") if total >= 80 else ("😢 Triste", "menor")
         
-        # Optimización: Solo cambiar escala si es diferente
         if self.__escala_actual != nueva_escala:
             self.__escala_actual = nueva_escala
             
@@ -373,11 +341,8 @@ class MainModule(Module):
         return total, f"{estado_emo} ({total:.0f}%)"
 
     def __actualizar_grafica(self):
-        """Optimizado para mejor rendimiento"""
-        # Contador para reducir frecuencia de actualización visual
         self.__update_counter += 1
         
-        # Procesar nuevos datos
         nuevos_datos = []
         while True:
             tiempo, voltaje = self.__signal.siguiente_valor()
@@ -388,68 +353,56 @@ class MainModule(Module):
         if not nuevos_datos:
             return
         
-        # Agregar datos a buffers
         for tiempo, voltaje in nuevos_datos:
             self.__tiempos_buffer.append(tiempo)
             self.__voltajes_buffer.append(voltaje)
         
-        # Solo actualizar visual cada N iteraciones
         if self.__update_counter % 3 != 0:
             return
         
         if not self.__tiempos_buffer:
             return
         
-        # Convertir a arrays solo cuando sea necesario
         tiempos_array = np.array(list(self.__tiempos_buffer))
         voltajes_array = np.array(list(self.__voltajes_buffer))
         
-        # Aplicar filtros (optimizado)
         if len(voltajes_array) > 0:
             voltajes_filtrados = self.__signal.aplicar_filtros(voltajes_array)
         else:
             return
         
-        # Actualizar gráfica (optimizado)
         self.__linea.set_data(tiempos_array, voltajes_filtrados)
         
-        # Lógica de música optimizada
         ahora = time.time()
         if (voltajes_filtrados.size > 0 and not self.__mute and 
-            ahora - self.__ultimo_tiempo_musica >= 10):  # Aumentar intervalo
+            ahora - self.__ultimo_tiempo_musica >= 10):
             
             self.__ultimo_tiempo_musica = ahora
             
-            # Actualizar datos fake de suelo
             if ahora - self.__soil_fake_last_update >= 60:
                 self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
                 self.__soil_fake_last_update = ahora
             
-            # Procesar bienestar en background
             try:
                 temp, hum, light, _ = self.__signal.obtener_datos_sensores()
                 self.actualizar_perfil_y_bienestar(temp, hum, light, self.__soil_fake_value)
             except Exception as e:
                 print(f"Error actualizando bienestar: {e}")
         
-        # Ajustar límites de manera eficiente
         if len(voltajes_filtrados) > 0:
-            media = np.mean(voltajes_filtrados[-100:])  # Solo últimos 100 valores
+            media = np.mean(voltajes_filtrados[-100:])
             self.__ax.set_ylim(media - 10, media + 10)
         
         if len(tiempos_array) > 0:
             tiempo_actual = tiempos_array[-1]
             self.__ax.set_xlim(max(0, tiempo_actual - 5), tiempo_actual)
         
-        # Optimización: Solo redibujar si es necesario
         try:
             self.__canvas.draw_idle()
         except Exception as e:
             print(f"Error dibujando canvas: {e}")
 
     def actualizar_perfil_y_bienestar(self, temp, hum, light, soil):
-        """Optimizado con cache"""
-        # Solo recargar perfil si ha pasado tiempo suficiente
         current_time = time.time()
         if current_time - getattr(self, '_last_profile_update', 0) > 30:
             self.perfil_planta = self.cargar_perfil_planta()
@@ -465,10 +418,9 @@ class MainModule(Module):
         return total
 
     def __iniciar_musica(self):
-        """Optimizado con thread separado"""
         try:
             if not pygame.mixer.get_init(): 
-                pygame.mixer.init(buffer=512)  # Buffer más pequeño
+                pygame.mixer.init(buffer=512)
             
             sintesisMusical.iniciar_lluvia()
             self.__mute = False
@@ -477,7 +429,6 @@ class MainModule(Module):
             d = os.path.dirname(__file__)
             self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/stopMusic.png")))
             
-            # Iniciar thread de música
             if self.__music_thread is None or not self.__music_thread.isRunning():
                 self.__music_thread = MusicThread(self)
                 self.__music_thread.start()
@@ -489,11 +440,9 @@ class MainModule(Module):
         return self.__leer_tonalidad_config()
 
     def __actualizar_bienestar(self):
-        """Optimizado para ejecutar menos frecuentemente"""
         try:
             temp, hum, light, _ = self.__signal.obtener_datos_sensores()
             
-            # Actualizar dato fake de suelo
             now = time.time()
             if now - self.__soil_fake_last_update >= 60:
                 self.__soil_fake_value = str(round(random.uniform(50, 60), 1))
@@ -504,10 +453,9 @@ class MainModule(Module):
             print(f"Error en actualizar_bienestar: {e}")
 
     def cargar_frecuencias_sensores(self):
-        """Con cache para evitar I/O innecesario"""
         try:
             current_time = time.time()
-            if current_time - self.__config_last_read < 30:  # Cache por 30 segundos
+            if current_time - self.__config_last_read < 30:
                 return
             
             self.__config_last_read = current_time
@@ -529,7 +477,6 @@ class MainModule(Module):
             print(f"Error cargando frecuencias: {e}")
 
     def guardar_dato_sensor(self, sensor, valor):
-        """Optimizado para evitar I/O excesivo"""
         if valor == "--": 
             return
         
@@ -545,7 +492,6 @@ class MainModule(Module):
                 print(f"Error guardando sensor {sensor}: {e}")
 
     def __leer_tonalidad_config(self):
-        """Con cache optimizado"""
         try:
             current_time = time.time()
             if ('tonalidad' in self.__config_cache and 
@@ -566,7 +512,6 @@ class MainModule(Module):
         return "C"
 
     def __leer_dispositivo_config(self):
-        """Con cache optimizado"""
         try:
             current_time = time.time()
             if ('dispositivo' in self.__config_cache and 
@@ -587,7 +532,6 @@ class MainModule(Module):
         return None
 
     def __toggle_musica(self):
-        """Optimizado"""
         try:
             if self.__btn_toggle.isChecked():
                 self.__mute = False
@@ -595,7 +539,6 @@ class MainModule(Module):
                 self.__btn_toggle.setIcon(QIcon(os.path.join(d, "../img/stopMusic.png")))
                 sintesisMusical.iniciar_lluvia()
                 
-                # Reiniciar thread si es necesario
                 if self.__music_thread is None or not self.__music_thread.isRunning():
                     self.__music_thread = MusicThread(self)
                     self.__music_thread.start()
@@ -613,13 +556,10 @@ class MainModule(Module):
             print(f"Error toggle música: {e}")
 
     def __actualizar_configuracion_txt(self, nueva_nota):
-        """Optimizado para I/O"""
         try:
-            # Actualizar cache inmediatamente
             self.__config_cache['tonalidad'] = nueva_nota
             self.__config_cache['tonalidad_time'] = time.time()
             
-            # Actualizar archivo en background
             if os.path.exists("configuracion.txt"):
                 nuevas_lineas = []
                 tonalidad_actualizada = False
@@ -641,9 +581,7 @@ class MainModule(Module):
             print(f"Error actualizando configuración: {e}")
 
     def __toggle_grabacion(self):
-        """Optimizado con threads"""
         if self.__btn_grabar.isChecked():
-            # Iniciar grabación
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             ruta_almacenamiento = "grabaciones"
             
@@ -660,16 +598,15 @@ class MainModule(Module):
             os.makedirs(ruta_almacenamiento, exist_ok=True)
             filename = os.path.join(ruta_almacenamiento, f"grabacion_{timestamp}.wav")
             
-            print(f"[🎙️] Iniciando grabación: {filename}")
+            print(f"Iniciando grabación: {filename}")
             
-            # Configurar UI
+
             self.__grabando = True
             self.__grab_start_time = datetime.datetime.now()
             self.__grab_label.setText("⏺️ 00:00")
             self.__grab_label.show()
             self.__grab_timer.start(1000)
             
-            # Iniciar thread de grabación
             dispositivo_id = self.__leer_dispositivo_config()
             self.__audio_recorder = AudioRecorderThread(filename, dispositivo_id)
             self.__audio_recorder.grabacion_terminada.connect(self.__on_grabacion_terminada)
@@ -677,30 +614,26 @@ class MainModule(Module):
             self.__audio_recorder.start()
             
         else:
-            # Detener grabación
-            print("[🛑] Deteniendo grabación...")
+            print("Deteniendo grabación...")
             self.__grabando = False
             self.__grab_timer.stop()
             self.__grab_label.hide()
             
             if self.__audio_recorder and self.__audio_recorder.isRunning():
                 self.__audio_recorder.detener_grabacion()
-                self.__audio_recorder.wait(3000)  # Esperar máximo 3 segundos
+                self.__audio_recorder.wait(3000)
 
     def __on_grabacion_terminada(self, filename):
-        """Callback cuando termina la grabación"""
-        print(f"[✅] Grabación guardada: {filename}")
+        print(f"Grabación guardada: {filename}")
 
     def __on_error_grabacion(self, error):
-        """Callback cuando hay error en grabación"""
-        print(f"[❌] Error en grabación: {error}")
+        print(f"Error en grabación: {error}")
         self.__grabando = False
         self.__grab_timer.stop()
         self.__grab_label.hide()
         self.__btn_grabar.setChecked(False)
 
     def __actualizar_tiempo_grabacion(self):
-        """Optimizado para mostrar tiempo"""
         if not self.__grabando:
             return
             

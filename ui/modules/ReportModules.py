@@ -41,22 +41,18 @@ class ReportModule(Module):
         self.canvas = None
 
     def draw(self):
-        # Cargar nombre de la planta antes de crear el título
         self.cargar_nombre_planta()
         
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         layout.setSpacing(15)
 
-        # Título
         title = QLabel(f'Visualizar reportes de la planta "{self.planta_nombre}":')
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
         layout.addWidget(title)
 
-        # Controles de selección
         ctr_layout = QHBoxLayout()
 
-        # Selector de sensor
         sensor_layout = QVBoxLayout()
         sensor_label = QLabel("Seleccionar sensor:")
         sensor_label.setStyleSheet("color: white;")
@@ -68,7 +64,6 @@ class ReportModule(Module):
         sensor_layout.addWidget(self.sensor_combo)
         ctr_layout.addLayout(sensor_layout)
 
-        # Selector de período
         periodo_layout = QVBoxLayout()
         periodo_label = QLabel("Seleccionar período:")
         periodo_label.setStyleSheet("color: white;")
@@ -80,7 +75,6 @@ class ReportModule(Module):
         periodo_layout.addWidget(self.periodo_combo)
         ctr_layout.addLayout(periodo_layout)
 
-        # Botón de generar
         self.btn_generar = QPushButton("Generar Reporte")
         self.btn_generar.setStyleSheet("""
             QPushButton {
