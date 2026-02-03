@@ -7,8 +7,8 @@ from matplotlib.figure import Figure
 from matplotlib.dates import DateFormatter
 from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
 
-from controller.GetWeather import GetWeather
-from controller.WeatherWorker import WeatherWorker
+from controller.weather_controller import WeatherController
+from controller.weather_worker import WeatherWorker
 from ui.modules.Module import Module
 from collections import deque
 import datetime
@@ -49,7 +49,7 @@ class SensorDataUpdater(QThread):
         self.wait(1000)
 
 class GraphsModule(Module):
-    def __init__(self, signal_bio, main_module, weather: GetWeather):
+    def __init__(self, signal_bio, main_module, weather: WeatherController):
         super().__init__()
         self.signal_bio = signal_bio
         self.main_module = main_module

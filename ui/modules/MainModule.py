@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QFrame, QVBoxLayout, QSizePolicy, QLabe
 from PyQt6.QtGui import QMovie, QIcon
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from ui.fonts import fonts
+from ui.styles.fonts import fonts
 from ui.modules.Module import Module
 import os
 from ui.modules import sintesisMusical
@@ -104,6 +104,11 @@ class MusicThread(QThread):
 class MainModule(Module):
     def __init__(self, señal_bio):
         super().__init__()
+        
+        # Inicializar cache de configuración PRIMERO
+        self.__config_cache = {}
+        self.__config_last_read = 0
+        
         self.__signal = señal_bio
         self.__grabando = False
         self.__grab_label = QLabel("⏺️ 00:00")
@@ -182,10 +187,6 @@ class MainModule(Module):
         self.ultimo_guardado = {k: 0 for k in self.frecuencias_sensores}
         self.directorio_historial = "historialLecturas"
         os.makedirs(self.directorio_historial, exist_ok=True)
-        
-        # Cache para configuración
-        self.__config_cache = {}
-        self.__config_last_read = 0
         
         self.cargar_frecuencias_sensores()
         self.perfil_planta = self.cargar_perfil_planta()

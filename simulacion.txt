@@ -1,0 +1,43 @@
+usarDatosReales=false
+
+# ============================================
+# RANGOS DE SIMULACIÓN - SENSORES AMBIENTALES
+# ============================================
+
+# Temperatura (°C)
+temperaturaMin=18.0
+temperaturaMax=32.0
+
+# Humedad Relativa (%)
+humedadRelativaMin=40.0
+humedadRelativaMax=80.0
+
+# Iluminación (lux)
+iluminacionMin=15000.0
+iluminacionMax=60000.0
+
+# Humedad de Suelo (%)
+humedadSueloMin=45.0
+humedadSueloMax=75.0
+
+# ============================================
+# RANGOS DE SIMULACIÓN - SEÑAL BIOELÉCTRICA
+# ============================================
+
+# Voltaje base en milivoltios (mV)
+voltajeBioMin=-15.0
+voltajeBioMax=15.0
+
+# Amplitud de variación (para simular cambios)
+voltajeBioVariacion=5.0
+
+# Frecuencia de actualización de sensores (segundos)
+frecuenciaActualizacionSensores=3.0
+
+# ============================================
+# NOTAS:
+# ============================================
+# - Los valores se generan aleatoriamente dentro de los rangos
+# - La señal bioeléctrica simula fluctuaciones naturales
+# - Los sensores se actualizan cada X segundos configurables
+# - Estos valores solo se usan cuando usarDatosReales=false

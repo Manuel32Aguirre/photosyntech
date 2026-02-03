@@ -1,0 +1,18 @@
+from PyQt6.QtCore import pyqtSignal, QObject
+
+from controller.weather_controller import WeatherController
+from model.weather_info import WeatherInfo
+
+
+class WeatherWorker(QObject):
+    finished = pyqtSignal()
+    result_ready = pyqtSignal(WeatherInfo)
+
+    def __init__(self, weather: WeatherController):
+        super().__init__()
+        self.__weather = weather
+
+    def run_task(self):
+        result = self.__weather.get_weather()
+        self.result_ready.emit(result)
+        self.finished.emit()
