@@ -41,6 +41,9 @@ class ReportModule(Module):
         self.canvas = None
 
     def draw(self):
+        # Cargar nombre de la planta antes de crear el título
+        self.cargar_nombre_planta()
+        
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         layout.setSpacing(15)
@@ -165,9 +168,6 @@ class ReportModule(Module):
         layout.addLayout(btn_layout)
 
         self.setLayout(layout)
-
-        # Cargar nombre de la planta desde el perfil
-        self.cargar_nombre_planta()
 
     def cargar_nombre_planta(self):
         """Carga el nombre de la planta desde el archivo Perfil.txt"""

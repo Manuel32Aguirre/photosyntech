@@ -40,8 +40,6 @@ env/
 # Project specific
 historialLecturas/*.txt
 grabaciones/*.wav
-configuracion.txt
-Perfil.txt
 dataset_prueba.txt
 
 # Environment variables

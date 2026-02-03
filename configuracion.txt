@@ -1,0 +1,7 @@
+tonalidad=E
+dispositivo=5
+frecuenciatemperatura=60
+frecuenciahumedad_relativa=60
+frecuenciailuminacion=60
+frecuenciahumedad_suelo=60
+rutaalmacenamiento=C:/Users/vic-s/Desktop
